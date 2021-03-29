@@ -1,0 +1,764 @@
+---
+title: "Scrapping Kazakhstan cadastre data"
+author: "Eduard Bukin"
+date: "`r Sys.Date()`"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+
+
+```{r setup}
+library(pacman)
+pacman::p_load(sf, here, fs, tidyverse, stringi, jsonlite, 
+               httr, RCurl, progress, rgdal, glue, progressr)
+force_reharvest <- FALSE
+```
+
+
+
+# Overview of the scrapping process
+
+We aim to hares GIS polygons of land plots form the kadastre map of Kazakhstan:
+
+-  [http://www.aisgzk.kz/aisgzk/ru/content/maps/](http://www.aisgzk.kz/aisgzk/ru/content/maps/)
+
+This is a challenging task, because when we zoom in to the level of one rayon, we receive all maps in raters.
+
+```{r out.width="100%"}
+smpl_poly_rast <- here("data-raw", "imgs", "sample-poly-rasters.png")
+
+if (!file.exists(smpl_poly_rast)) {
+  "http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/export?dpi=96&transparent=true&format=png8&layers=show%3A147&bbox=7942828.607889999%2C6208598.464414631%2C8243720.20321%2C6512657.339685368&bboxSR=3857&imageSR=3857&size=760%2C768&_ts=1616703947839&layerDefs=147%3AShape_Area%20%3E%3D%20748174&f=image" %>% 
+  download.file(smpl_poly_rast)
+}
+
+knitr::include_graphics(smpl_poly_rast)
+```
+
+We also receive points of the coordinates centroids in raster format.
+
+```{r out.width="100%"}
+smpl_point_rast <- here("data-raw", "imgs", "sample-point-rasters.png")
+
+if (!file.exists(smpl_point_rast)) {
+  "http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZemPnt2/MapServer/export?dpi=96&transparent=true&format=png8&layers=show%3A147&bbox=7942828.607889999%2C6208598.464414631%2C8243720.20321%2C6512657.339685368&bboxSR=3857&imageSR=3857&size=760%2C768&_ts=1616703947841&layerDefs=147%3AShapeArea%20%3C%20748174&f=image" %>% 
+  download.file(smpl_point_rast)
+}
+
+knitr::include_graphics(smpl_point_rast)
+```
+
+One ways exist, however! And we will explore it below. Here, we have an overview of what are the overall posibilities of the server and what is present there:
+
+-  `http://www.aisgzk.kz/aisgzk/Proxy/{......}/MapServer` the root link
+
+Available servers for `{......}` are: 
+
+- `aisgzkZem2` - Polygons with the plots. Contains many layers here: [http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer?f=json](http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer?f=json);
+
+    -  [Call example](http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/export?dpi=96&transparent=true&format=png8&layers=show%3A147&bbox=7942828.607889999%2C6157485.119002739%2C8243720.20321%2C6563770.68509726&bboxSR=3857&imageSR=3857&size=551%2C744&_ts=1616779541796&layerDefs=147%3AShape_Area%20%3E%3D%201031965&f=image) where rasters of polygons is returned.
+
+-  `aisgzkZemPnt2` - points for plots with the same layers as polygons. Infor is here:  [http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZemPnt2/MapServer?f=json](http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZemPnt2/MapServer?f=json);
+
+    -  [Call example](http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZemPnt2/MapServer/export?dpi=96&transparent=true&format=png8&layers=show%3A147&bbox=7942828.607889999%2C6157485.119002739%2C8243720.20321%2C6563770.68509726&bboxSR=3857&imageSR=3857&size=551%2C744&_ts=1616779541784&layerDefs=147%3AShapeArea%20%3C%201031965&f=image) where raster image of points is returned.
+    
+-  `aisgzkEZKK` - Seems to be a map server for the regional boundaries, roads and extents.
+
+-  `aisgzkTopo2` - map server that in fact returns rayon boundaries. [Call example](http://www.aisgzk.kz/aisgzk/Proxy/aisgzkTopo2/MapServer/34/query?f=json&where=RAION%20%3D%20%2709134%27&returnGeometry=true&spatialRel=esriSpatialRelIntersects&outSR=3857)
+
+
+
+# Logic of data extraction:
+
+
+To extract data from the web, we need to follow the cadastre number and break the hierarchy of the cadastre number into the pieces. 
+
+Generic example of a cadastre number is: `09-134-011-132`, where 
+
+-  `09` is the `oblast`;
+
+-  `134` is the `rayon` code;
+
+-  `011` is the `kvartal`;
+
+-  `132` plot id in kvartal`;
+
+
+The problem is that we can only extract all ids of oblast and rayon, but not kvartals and definitely not plots. However, there is a [search form](http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find), where we can search by incomplete cadastre number and get only `10` polygons with the data. Using this search form, we can `fish` all available kvartals in each rayon and then all plots in each kvartal.
+
+Finally, as for the metadata for each plot, it could be extracted through an ajax call `/aisgzk/Index/FindObjInfoForMap` in the script [http://www.aisgzk.kz/aisgzk/js/maps.js](http://www.aisgzk.kz/aisgzk/js/maps.js).
+
+
+__Overall, fishing algorithm is the following__: 
+
+
+1.  Extract all oblast/rayons from [http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer?f=json](http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer?f=json);
+
+2.  Write an algorithm, which will learn the structure of `kvartals` and `plots` in each rayon/oblast using query form [http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find](http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find). Download all corresponding polygons in `json` at least. This is only possible up to 10 polygons at the same time, so it may take some time. 
+
+3.  Extract metadata for each polygon by its cadastre ID number from the website's using `FindObjInfoForMap` ajax request in the underlining JS of the website here: [http://www.aisgzk.kz/aisgzk/js/maps.js](http://www.aisgzk.kz/aisgzk/js/maps.js).  
+
+
+## Step 1. Gather oblast and rayon indexes
+
+Below, we generate oblast/rayon index. 
+
+```{r}
+index_raw_file <- here("data-raw", "01-obl-ray-index-raw.json")
+
+if (!file.exists(index_raw_file)) {
+  "http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer?f=json" %>% 
+  download.file(index_raw_file)
+}
+
+index_raw <- jsonlite::fromJSON(index_raw_file)
+
+index_kaz_adm <- 
+  index_raw$layers %>% 
+  as_tibble() %>% 
+  select(id, name) %>% 
+  separate(name, c("code", "obl_id", "rayon_id"), remove = FALSE) %>% 
+  select(id, name, obl_id, rayon_id) %>% 
+  mutate(date_harvested = Sys.Date(), 
+         spatial_refernce = index_raw$spatialReference$wkid)
+
+glimpse(index_kaz_adm)
+```
+
+
+Now, we can try harvesting actual shapes of each oblast/rayon and maybe kvartal too. [http://www.aisgzk.kz/aisgzk/Proxy/aisgzkTopo2/MapServer](http://www.aisgzk.kz/aisgzk/Proxy/aisgzkTopo2/MapServer) contains API to access actual maps/polygons and other features of the Kaz cadastre data. Table below summarieses all posible mar servers with the data that couls be accessed. 
+
+We are interested in IDs 32 - Oblasts, 33 - Kvartals and 34 - Rayons. 
+
+```{r}
+raw_map_data <-
+"http://www.aisgzk.kz/aisgzk/Proxy/aisgzkTopo2/MapServer?f=json" %>% 
+  jsonlite::fromJSON()
+
+raw_map_data$layers %>% 
+  as_tibble() 
+```
+
+
+There is no ways how we can load all the boundaries at once and we need to go one by one through the query form here: 
+
+Example of a simple query for rayon info:
+
+`http://aisgzk.kz/aisgzk/Proxy/aisgzkTopo2/MapServer/34/query?text=01001&geometryType=esriGeometryPolygon&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=true&returnZ=true&returnM=true&f=pjson`
+
+
+After we learn what is the object id, it is also possible to access object-speifc page through a direct link: `http://aisgzk.kz/aisgzk/Proxy/aisgzkTopo2/MapServer/34/276` 
+
+Let us try harvesting rayon shapes one by one.
+
+
+### 1. Call that return geometry of one rayon.
+
+```{r}
+ray_geom_call <- "http://aisgzk.kz/aisgzk/Proxy/aisgzkTopo2/MapServer/34?f=pjson"
+
+ray_layerInfo <- jsonlite::fromJSON(ray_geom_call)
+ray_geomType <- ray_layerInfo$geometryType
+
+ray_call_base <- 
+  str_c(
+    "http://aisgzk.kz/aisgzk/Proxy/aisgzkTopo2/MapServer/34/query?",
+    "text={obl_ray}", 
+    "&geometryType=esriGeometryPolygon", 
+    "&spatialRel=esriSpatialRelIntersects",
+    "&outFields=*&returnGeometry=true&returnZ=false&returnM=false&f=pjson"
+  )
+
+set.seed(1221)
+random_obl_ray <- 
+  index_kaz_adm %>%
+  sample_n(1) %>%
+  mutate(obl_ray = str_c(obl_id, rayon_id)) %>%
+  pull(obl_ray)
+
+random_obl_ray_call <- glue::glue(ray_call_base, obl_ray = random_obl_ray)
+random_obl_ray_call
+```
+
+
+### 2. Extracting actual polygon and its features and converting it into an sf object with attributes. We also transliterate all the cyclic letters to sinplify working in R.
+
+
+#### 2.1 Extracting poly info.
+
+```{r}
+raw_responce <- 
+  random_obl_ray_call %>%  
+  RCurl::getURL() 
+
+raw_json <- 
+  raw_responce %>% 
+  jsonlite::fromJSON(simplifyVector = FALSE, simplifyDataFrame = FALSE)
+
+str(raw_json, max.level = 1)
+```
+
+#### 2.2 Converting features and attributes to an `sf`
+
+```{r}
+# Feature to polygon converter function
+#
+features_to_sf_polygon <- function(features) {
+  ring2matrix <- function(ring) do.call(rbind, lapply(ring, unlist))
+  rings2multipoly <- function(rings)
+    sf::st_multipolygon(list(lapply(rings, ring2matrix)))
+  
+  getGeometry <- function(feature) {
+    if (is.null(unlist(feature$geometry$rings))) {
+      sf::st_multipolygon()
+    } else
+      rings2multipoly(feature$geometry$rings)
+  }
+  
+  sf::st_sfc(lapply(features, getGeometry))
+}
+
+
+raw_json_features <- 
+  raw_json$features %>% 
+  features_to_sf_polygon()
+
+raw_json_features %>% 
+  ggplot() + 
+  geom_sf(alpha = 0.4)
+
+```
+
+
+#### 2.3 Gathering and transliterating attributes
+
+
+```{r}
+drop_nonalphanum <- 
+  . %>%
+  stringi::stri_trans_general("Latin-ASCII" ) %>% 
+  stringi::stri_trans_general("Any-Hex/Unicode" )  %>%
+  str_replace_all("U\\+02B9", "") %>%
+  stringi::stri_trans_general("Hex-Any/Unicode") %>%
+  str_replace_all("[^[:alnum:]_]", "")
+  
+get_single_attribute <- function(feat_attrs) {
+  names(feat_attrs) <-
+    stringi::stri_trans_general(names(feat_attrs), "Cyrl-Latn") %>%
+    drop_nonalphanum
+  
+  feat_attrs %>%
+    imap(~ {
+      if (!is.numeric(.x) && !is.null(.x)) {
+        if (str_detect(.y, "kaz"))
+        {
+          .x <- stringi::stri_trans_general(.x, "Kazakh-Latin/BGN") %>%
+            stringi::stri_trans_general("Latin-ASCII") %>%
+            drop_nonalphanum
+        } else if (str_detect(.x, "[\u0400-\U052F]"))
+        {
+          .x <-
+            stringi::stri_trans_general(.x, "Cyrillic-Latin/BGN") %>%
+            stringi::stri_trans_general("Latin-ASCII") %>%
+            drop_nonalphanum
+        }
+      } else if (is.null(.x)) {
+        .x <- NA_character_
+      }
+      return(.x)
+    }) %>%
+    as_tibble() %>%
+    janitor::clean_names()
+}
+
+get_all_attributes <- function(features, place = "attributes") {
+  features %>% 
+    map(place) %>% 
+    map_dfr(get_single_attribute)
+}
+
+# raw_json$features[[1]]$attributes %>% 
+#   get_single_attribute() %>% 
+#   glimpse()
+
+raw_json$features %>% 
+  get_all_attributes %>% 
+  glimpse()
+
+```
+
+
+
+### 3. Getting all poly geometries in raw and saving them 
+
+
+```{r}
+rayons_raw_file <- 
+  here(
+    "data-raw",
+    str_c(
+      "02-1-ray-raw-json-responces-",
+      Sys.time() %>% str_replace_all("[^[:alnum:]]", "-"),
+      ".rds"
+    )
+  )
+
+if (force_reharvest) {
+  
+  handlers(list(
+    handler_progress(
+      format   = ":spin :current/:total [:bar] :percent in :elapsed ETA: :eta",
+      width    = 60,
+      complete = "+"
+    )
+  ))
+  
+  
+  rayons_raw <-
+    with_progress({
+      p <- progressor(steps = nrow(index_kaz_adm))
+      index_kaz_adm %>%
+        mutate(
+          obl_ray = str_c(obl_id, rayon_id),
+          ray_url_call = glue::glue(ray_call_base)
+        ) %>%
+        # sample_n(10) %>%
+        mutate(reponce_raw = map(ray_url_call, function(.x) {
+          p()
+          RCurl::getURL(.x)
+        }))
+    })
+  
+  write_rds(rayons_raw, rayons_raw_file, compress = "gz")
+}
+
+
+rayons_raw <-
+  read_rds(here(
+    "data-raw",
+    "02-1-ray-raw-json-responces-2021-03-27-19-11-15.rds"
+  ))
+
+glimpse(rayons_raw)
+```
+
+
+### 4. Cleaning rayon polygons and saving them 
+
+
+
+```{r}
+
+if (force_reharvest) {
+  rayons_clean_file <- 
+  here(
+    "data-clean",
+    str_c(
+      "02-1-ray-shapes-clean-",
+      Sys.time() %>% str_replace_all("[^[:alnum:]]", "-")
+    )
+  )
+  
+  rayons_clean <-
+    rayons_raw %>%
+    mutate(
+      reponce_json =
+        map(
+          reponce_raw,
+          ~ jsonlite::fromJSON(
+            .x,
+            simplifyVector = FALSE,
+            simplifyDataFrame = FALSE
+          )
+        ),
+      reponce_attrs =
+        map(reponce_json, ~ get_all_attributes(.x$features)),
+      reponce_geometries =
+        map(
+          reponce_json,
+          ~ features_to_sf_polygon(.x$features) %>%
+            sf::st_set_crs(ray_layerInfo$extent$spatialReference$latestWkid) %>%
+            st_as_sf()
+        )
+      
+    ) %>% {
+      dta <- .
+      dta %>%
+        select(-reponce_geometries) %>%
+        bind_cols(dta$reponce_geometries %>% 
+                    bind_rows() %>%
+                    select(geometries = x))
+    } %>%
+    select(leyer_id = id,
+           obl_id,
+           rayon_id,
+           reponce_attrs,
+           geometries) %>%
+    unnest(reponce_attrs) %>%
+    st_as_sf()
+  
+  
+  write_rds(rayons_clean, str_c(rayons_clean_file, ".rds"), compress = "gz")
+  st_write(rayons_clean %>% select(-srvget),
+           str_c(rayons_clean_file, ".shp"),
+           delete_dsn = T)
+  
+}
+
+rayons_clean <-
+  read_rds(here(
+    "data-clean",
+    "02-1-ray-shapes-clean-2021-03-28-07-45-13.rds"
+  ))
+
+rayons_clean %>% 
+  glimpse()
+
+rayons_clean %>% 
+  ggplot() + geom_sf()
+
+
+rayons_clean$geometries %>% plot
+```
+
+
+
+## Step 2. Fishing possible codes for kvartals
+
+
+Kvartal boundary has a 3 digits code in cadastre for each rayon. What we will do, is going one by one digits through all sub0codes for each rayon to identify number of records displayed for each digit.
+
+```{r}
+layer_rayon_index <- 
+  rayons_clean %>% 
+  st_drop_geometry() %>% 
+  select(leyer_id, obl_id, rayon_id, obl_rus, raj_rus )
+```
+
+
+Let us start from a simple examples of real call that return list of plots:
+
+
+```{r}
+get_resp_count <-
+  function(one_call, ticker = function() return(NULL)) {
+    one_call_raw <-
+      try({RCurl::getURL(one_call)})
+    
+    if ("try-error" %in% class(one_call_raw)) {
+      Sys.sleep(0.5 + runif(1, 0.1, 0.3))
+      raw_get <- httr::GET(one_call,
+                           encode = "form",
+                           config = config(ssl_verifypeer = FALSE))
+      one_call_raw <- content(raw_get, as = "text")
+    }
+    
+    if ("try-error" %in% class(one_call_raw)) {
+      Sys.sleep(1.5 + runif(1, 0.1, 0.3))
+      raw_get <- httr::GET(one_call,
+                           encode = "form",
+                           config = config(ssl_verifypeer = FALSE))
+      one_call_raw <- content(raw_get, as = "text")
+    }
+    
+    ticker()
+    
+    if ("try-error" %in% class(one_call_raw)) return(tibble())
+    
+    one_call_json <-
+      one_call_raw %>%
+      jsonlite::fromJSON(simplifyDataFrame = F, simplifyVector = F)
+    
+    one_call_json$results  %>%
+      map("attributes") %>%
+      map_dfr(get_single_attribute) %>%
+      bind_cols(one_call_json$results %>%
+                  map_dfr( ~ {
+                    .x[["attributes"]] <- NULL
+                    get_single_attribute(.x)
+                  }))
+  }
+
+trial_call <- "http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText=01176&contains=true&searchFields=KAD_NOMER&layers=22&returnGeometry=false&f=pjson"
+
+get_resp_count(trial_call)
+```
+
+Function for fishing.
+
+```{r}
+fish_one_digit <-
+  function(fish_tbl,
+           fish_call,
+           with_progress = TRUE)  {
+    pb <- progress::progress_bar$new(#
+      total = 10,
+      force = FALSE,
+      format = ":spin :current/:total (dig-:sttep) [:bar] :percent in :elapsedfull ETA: :eta")
+    
+    0:9 %>%
+      as.list() %>%
+      accumulate(function(.x, .y) {
+        out <-
+          try({
+            call_out <-
+              fish_tbl %>%
+              mutate(new_digit = .y,
+                     call = glue::glue(fish_call))
+            resp_out <- get_resp_count(call_out$call)
+            bind_cols(call_out, resp_out)
+          })
+        
+        if ("try-error" %in% class(out))
+        {
+          return(NULL)
+        }
+        else{
+          if (with_progress)
+            pb$tick(tokens = list(sttep = .y))
+          
+          cat("Digit ", .y, "\n", call_out$call, "\n")
+          return(out)
+        }
+      }, .init = tibble()) %>%
+      keep(~ !is.null(.x)) %>%
+      keep(~ nrow(.x) > 0) %>%
+      keep(~ ncol(.x) > 0) %>%
+      bind_rows() %>% 
+      return()
+  }
+
+# Testing fishing call
+one_base_rayon <- 
+  layer_rayon_index %>% 
+  filter(leyer_id == 22) %>% 
+  mutate(base_digit = "")
+
+fish_call <- 
+  "http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText={obl_id}{rayon_id}{base_digit}{new_digit}&contains=true&searchFields=KAD_NOMER&layers={leyer_id}&returnGeometry=false&f=pjson"
+
+# fish_one_digit(one_base_rayon, fish_call)
+```
+
+Fishing all existing kvartals. We have three rayons of interest:
+
+-  03_323 - Kegen, 
+-  03_044 - Enbekshikazakh and 
+-  03_050 - Raiymbek
+
+```{r}
+fish_one_digit_fot_all <- function(indx, fcall, with_progress = TRUE,
+                                  save_interm = NULL, parall = FALSE) {
+  
+  valid_index <- 
+    indx %>%
+    select(leyer_id:base_digit) %>%
+    distinct() 
+  
+  pb_digit <- progress::progress_bar$new(#
+    total = nrow(valid_index),
+    # force = TRUE,
+    format = ":spin :current/:total [:bar] :percent in :elapsedfull ETA: :eta")
+  
+  
+  if (parall) {
+    library(furrr)
+    plan(multisession, workers = 8)
+  }
+  out_tbl <-
+    valid_index %>%
+    rowwise() %>%
+    furrr::future_pmap( ~ {
+      pb_digit$tick()
+      base_link <- rlang::dots_list(...) 
+      out <- 
+        rlang::dots_list(...) %>%
+        as_tibble() %>%
+        fish_one_digit(fcall, with_progress = with_progress)
+      
+      if (!is.null(save_interm)) {
+        name <- str_c(
+          unique(base_link$obl_id),
+          unique(base_link$rayon_id),
+          unique(base_link$base_digit), sep = "-") %>% 
+          str_c(".rds", collapse = "") %>% 
+          str_c(save_interm, .) %>% 
+          here()
+        
+        write_rds(out, name, compress = "gz")
+      }
+    }) %>%
+    bind_rows()
+  
+  if (nrow(out_tbl) > 0) {
+    out_tbl <-
+      out_tbl %>%
+      mutate(base_digit = str_c(base_digit, new_digit))
+  }
+  
+  out_tbl
+  
+}
+
+
+
+# fish_n_levels <- function(indx, fish_call, n_levels = 3) {
+#   
+#   indx %>%
+#     mutate(base_digit = "") %>%
+#     list() %>%
+#     append(seq(1, n_levels)) %>%
+#     reduce(function(.x, .y) {
+#       cat("Digit number ", .y, "\n")
+#       .x %>%
+#         fish_one_digit_fot_all(fish_call)
+#     })
+# }
+
+# 
+# ids_30_35 <- 
+#   layer_rayon_index %>%
+#   filter(leyer_id %in% 30:35) %>%
+#   fish_n_levels(fish_call, 3)
+
+```
+
+
+### Harveting kvartals in rayons of interest
+
+```{r}
+if (force_reharvest) {
+  kvartal_index_file <-
+    here("data-clean",
+         str_c(
+           "03-1-kvartal-index-clean-03-part",
+           Sys.time() %>% str_replace_all("[^[:alnum:]]", "-"),
+           ".rds"
+         ))
+  
+  kvartal_raw_file <-
+    here("data-raw",
+         str_c(
+           "03-1-kvartal-index-three-dig-03-part",
+           Sys.time() %>% str_replace_all("[^[:alnum:]]", "-"),
+           ".rds"
+         ))
+  
+  # We are interested in :
+  # Kegen, Enbekshikazakh and Raiymbek 
+  
+  
+  first_level_digits_raw <-
+    layer_rayon_index %>%
+    filter(obl_id == "03", rayon_id %in% c("323", "044", "050")) %>%
+    mutate(base_digit = "") %>%
+    fish_one_digit_fot_all(fish_call,
+      with_progress = FALSE,
+      parall = T)
+  
+  second_level_digits_raw <-
+    first_level_digits_raw %>%
+    fish_one_digit_fot_all(fish_call,
+      with_progress = FALSE,
+      parall = T)
+  
+  third_level_digits_raw <-
+    second_level_digits_raw %>%
+    fish_one_digit_fot_all(
+      fish_call, 
+      # with_progress = FALSE,
+      # save_interm = "data-raw/02-kvartal-indecis-3-dig/",
+      parall = T
+      )
+  
+  # thre_dig_raw <- 
+  #   layer_rayon_index %>%
+  #   filter(leyer_id == 1) %>% 
+  #   mutate(base_digit = "") %>% 
+  #   get_up_to_3_dig(fish_call)
+  
+  
+  kvartal_index <-
+    third_level_digits_raw %>%
+    select(leyer_id:raj_rus, kvartal_id = base_digit) %>%
+    distinct()
+  
+  third_level_digits_raw %>% 
+    write_rds(kvartal_raw_file, compress = "gz")
+  
+  write_rds(kvartal_index, kvartal_index_file, compress = "gz")
+}
+
+kvartal_index <-
+  read_rds(here(
+    "data-clean",
+    "03-1-kvartal-index-clean-03-part2021-03-28-14-35-36.rds"
+  ))
+
+third_level_digits_raw <- read_rds(
+  here("data-raw", "03-1-kvartal-index-three-dig-03-part2021-03-28-14-35-36.rds")
+)
+  
+  
+glimpse(kvartal_index)
+```
+
+
+
+### Fishin first digit of the plot ID in regions of interest
+
+
+```{r}
+if (force_reharvest) {
+  harvested <-
+    list.files("data-raw/03-kvartal-1-dig-plot-03") %>%
+    str_split("\\-|\\.") %>%
+    map( ~ {
+      str_c(.x[[1]], .x[[2]], .x[[3]])
+    }) %>%
+    unlist()
+  
+  four_level_digits_raw <-
+    third_level_digits_raw %>%
+    filter(!str_c(obl_id, rayon_id, base_digit) %in% harvested) %>%
+    fish_one_digit_fot_all(
+      fish_call,
+      with_progress = FALSE,
+      save_interm = "data-raw/03-kvartal-1-dig-plot-03/",
+      parall = T
+    )
+  
+ 
+}
+
+
+ four_level_digits_clean <-
+    list.files("data-raw/03-kvartal-1-dig-plot-03", full.names = T) %>%
+    map_dfr(read_rds) %>% 
+  mutate(base_digit = str_c(base_digit, new_digit)) %>% 
+  select(leyer_id : base_digit ) %>% 
+  distinct() 
+ 
+ four_level_digits_clean %>% 
+  glimpse()
+
+
+
+```
+
+
+## Step 3. Getting shapes of the plots
+
+
+We develop a set of functions in a separate file, which are used to extract plots data here.
+
+
+```{r}
+source(here("02-plots-harvesting-functions.R"))
+
+
+```
+
+
