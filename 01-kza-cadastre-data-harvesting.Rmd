@@ -20,7 +20,7 @@ force_reharvest <- FALSE
 
 # Overview of the scrapping process
 
-We aim to hares GIS polygons of land plots form the kadastre map of Kazakhstan:
+We aim to hares GIS polygons of land plots form the cadastre map of Kazakhstan:
 
 -  [http://www.aisgzk.kz/aisgzk/ru/content/maps/](http://www.aisgzk.kz/aisgzk/ru/content/maps/)
 
@@ -50,7 +50,7 @@ if (!file.exists(smpl_point_rast)) {
 knitr::include_graphics(smpl_point_rast)
 ```
 
-One ways exist, however! And we will explore it below. Here, we have an overview of what are the overall posibilities of the server and what is present there:
+One ways exist, however! And we will explore it below. Here, we have an overview of what are the overall possibilities of the server and what is present there:
 
 -  `http://www.aisgzk.kz/aisgzk/Proxy/{......}/MapServer` the root link
 
@@ -60,7 +60,7 @@ Available servers for `{......}` are:
 
     -  [Call example](http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/export?dpi=96&transparent=true&format=png8&layers=show%3A147&bbox=7942828.607889999%2C6157485.119002739%2C8243720.20321%2C6563770.68509726&bboxSR=3857&imageSR=3857&size=551%2C744&_ts=1616779541796&layerDefs=147%3AShape_Area%20%3E%3D%201031965&f=image) where rasters of polygons is returned.
 
--  `aisgzkZemPnt2` - points for plots with the same layers as polygons. Infor is here:  [http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZemPnt2/MapServer?f=json](http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZemPnt2/MapServer?f=json);
+-  `aisgzkZemPnt2` - points for plots with the same layers as polygons. Info is here:  [http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZemPnt2/MapServer?f=json](http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZemPnt2/MapServer?f=json);
 
     -  [Call example](http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZemPnt2/MapServer/export?dpi=96&transparent=true&format=png8&layers=show%3A147&bbox=7942828.607889999%2C6157485.119002739%2C8243720.20321%2C6563770.68509726&bboxSR=3857&imageSR=3857&size=551%2C744&_ts=1616779541784&layerDefs=147%3AShapeArea%20%3C%201031965&f=image) where raster image of points is returned.
     
@@ -68,6 +68,8 @@ Available servers for `{......}` are:
 
 -  `aisgzkTopo2` - map server that in fact returns rayon boundaries. [Call example](http://www.aisgzk.kz/aisgzk/Proxy/aisgzkTopo2/MapServer/34/query?f=json&where=RAION%20%3D%20%2709134%27&returnGeometry=true&spatialRel=esriSpatialRelIntersects&outSR=3857)
 
+
+Extra info could be received from javastript code underlining the webpage [http://www.aisgzk.kz/aisgzk/js/maps.js](http://www.aisgzk.kz/aisgzk/js/maps.js)
 
 
 # Logic of data extraction:
@@ -83,7 +85,7 @@ Generic example of a cadastre number is: `09-134-011-132`, where
 
 -  `011` is the `kvartal`;
 
--  `132` plot id in kvartal`;
+-  `132` plot id in kvartal` (Could also have 4 digits);
 
 
 The problem is that we can only extract all ids of oblast and rayon, but not kvartals and definitely not plots. However, there is a [search form](http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find), where we can search by incomplete cadastre number and get only `10` polygons with the data. Using this search form, we can `fish` all available kvartals in each rayon and then all plots in each kvartal.
@@ -128,7 +130,7 @@ glimpse(index_kaz_adm)
 ```
 
 
-Now, we can try harvesting actual shapes of each oblast/rayon and maybe kvartal too. [http://www.aisgzk.kz/aisgzk/Proxy/aisgzkTopo2/MapServer](http://www.aisgzk.kz/aisgzk/Proxy/aisgzkTopo2/MapServer) contains API to access actual maps/polygons and other features of the Kaz cadastre data. Table below summarieses all posible mar servers with the data that couls be accessed. 
+Now, we can try harvesting actual shapes of each oblast/rayon and maybe kvartal too. [http://www.aisgzk.kz/aisgzk/Proxy/aisgzkTopo2/MapServer](http://www.aisgzk.kz/aisgzk/Proxy/aisgzkTopo2/MapServer) contains API to access actual maps/polygons and other features of the Kaz cadastre data. Table below summaries all possible mar servers with the data that could be accessed. 
 
 We are interested in IDs 32 - Oblasts, 33 - Kvartals and 34 - Rayons. 
 
@@ -149,7 +151,7 @@ Example of a simple query for rayon info:
 `http://aisgzk.kz/aisgzk/Proxy/aisgzkTopo2/MapServer/34/query?text=01001&geometryType=esriGeometryPolygon&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=true&returnZ=true&returnM=true&f=pjson`
 
 
-After we learn what is the object id, it is also possible to access object-speifc page through a direct link: `http://aisgzk.kz/aisgzk/Proxy/aisgzkTopo2/MapServer/34/276` 
+After we learn what is the object id, it is also possible to access object-specif page through a direct link: `http://aisgzk.kz/aisgzk/Proxy/aisgzkTopo2/MapServer/34/276` 
 
 Let us try harvesting rayon shapes one by one.
 
@@ -183,10 +185,13 @@ random_obl_ray_call
 ```
 
 
-### 2. Extracting actual polygon and its features and converting it into an sf object with attributes. We also transliterate all the cyclic letters to sinplify working in R.
+### 2. Extracting rayon geometries
+
+We extract here actual polygon and features of oblasts and converting it into an sf object with attributes. We also transliterate all the cyclic letters to simplify working in R.
 
 
-#### 2.1 Extracting poly info.
+#### 2.1 Extracting poly info
+
 
 ```{r}
 raw_responce <- 
@@ -200,7 +205,9 @@ raw_json <-
 str(raw_json, max.level = 1)
 ```
 
+
 #### 2.2 Converting features and attributes to an `sf`
+
 
 ```{r}
 # Feature to polygon converter function
@@ -290,7 +297,6 @@ raw_json$features %>%
 ```
 
 
-
 ### 3. Getting all poly geometries in raw and saving them 
 
 
@@ -346,7 +352,6 @@ glimpse(rayons_raw)
 
 
 ### 4. Cleaning rayon polygons and saving them 
-
 
 
 ```{r}
@@ -542,11 +547,15 @@ fish_call <-
 # fish_one_digit(one_base_rayon, fish_call)
 ```
 
-Fishing all existing kvartals. We have three rayons of interest:
+Fishing all existing kvartals in three rayons of interest:
 
 -  03_323 - Kegen, 
 -  03_044 - Enbekshikazakh and 
 -  03_050 - Raiymbek
+
+
+In future, this part could be re-written to fish for all kvartals in entire oblast or country.
+
 
 ```{r}
 fish_one_digit_fot_all <- function(indx, fcall, with_progress = TRUE,
@@ -626,7 +635,8 @@ fish_one_digit_fot_all <- function(indx, fcall, with_progress = TRUE,
 ```
 
 
-### Harveting kvartals in rayons of interest
+### 2.1 Harveting kvartals index in the rayons of interest
+
 
 ```{r}
 if (force_reharvest) {
@@ -706,8 +716,50 @@ glimpse(kvartal_index)
 ```
 
 
+### 2.2 Collecting kvartals geometries in the rayons of interest
 
-### Fishin first digit of the plot ID in regions of interest
+TBD
+
+Key requests that can help:
+
+-  [http://www.aisgzk.kz/aisgzk/Proxy/aisgzkTopo2/MapServer/identify?f=json&tolerance=1&returnGeometry=true&returnFieldName=false&returnUnformattedValues=false&imageDisplay=159%2C769%2C96&geometry=%7B%22x%22%3A6786326.981226891%2C%22y%22%3A6367444.79994962%7D&geometryType=esriGeometryPoint&sr=3857&mapExtent=6775864.048522184%2C5952851.09152559%2C6879839.442275213%2C6455725.794645589&layers=all%3A33%2C34%2C38](http://www.aisgzk.kz/aisgzk/Proxy/aisgzkTopo2/MapServer/identify?f=json&tolerance=1&returnGeometry=true&returnFieldName=false&returnUnformattedValues=false&imageDisplay=159%2C769%2C96&geometry=%7B%22x%22%3A6786326.981226891%2C%22y%22%3A6367444.79994962%7D&geometryType=esriGeometryPoint&sr=3857&mapExtent=6775864.048522184%2C5952851.09152559%2C6879839.442275213%2C6455725.794645589&layers=all%3A33%2C34%2C38)
+
+-  [http://www.aisgzk.kz/aisgzk/Proxy/aisgzkTopo2/MapServer/identify?f=json&tolerance=1&returnGeometry=true&returnFieldName=false&returnUnformattedValues=false&imageDisplay=159%2C769%2C96&geometry=%7B%22x%22%3A7021089.033788763%2C%22y%22%3A6027399.48704663%7D&geometryType=esriGeometryPoint&sr=3857&mapExtent=6962888.970618828%2C5785444.168250272%2C7066864.364371858%2C6288318.871370271&layers=all%3A33%2C34%2C38](http://www.aisgzk.kz/aisgzk/Proxy/aisgzkTopo2/MapServer/identify?f=json&tolerance=1&returnGeometry=true&returnFieldName=false&returnUnformattedValues=false&imageDisplay=159%2C769%2C96&geometry=%7B%22x%22%3A7021089.033788763%2C%22y%22%3A6027399.48704663%7D&geometryType=esriGeometryPoint&sr=3857&mapExtent=6962888.970618828%2C5785444.168250272%2C7066864.364371858%2C6288318.871370271&layers=all%3A33%2C34%2C38)
+
+
+
+
+## Step 3. Getting shapes of the plots
+
+
+We develop a set of functions in a separate files, as well as scripts which are used to extract plots data. Here we only summarize the results.
+
+Overall, process of extracting plots geometries looks in a following way:
+
+Each geometry has a unique cadastre code XX-YYY-ZZZ-SSSF
+
+Where:
+
+XX - Oblast
+YYY - Rayon 
+ZZZ - Kvartal
+SSS - plot
+F   - Extra digit for a plot ID present in some SSS plots. 
+
+
+We can make a search request for XX-YYY and the server will only return 10 first records for us. Therefore, in order to get all plots in each kvartal, we need to:
+
+1. Identify ZZZ for this kvartal.
+2. Identify first valid "S" digits, which have plots in each kvartal
+3. Search each second S digit and harvest all 10 third "S" digits.
+4. Harvest extra F digits if at step 3 we got a message that limit for request transfer was reached.  
+
+
+
+### 3.1 Fishin first digit of the plot ID in regions of interest
+
+When we have three digits of each kvartal, we can start getting IDs of plots. 
+
 
 
 ```{r}
@@ -749,10 +801,8 @@ if (force_reharvest) {
 ```
 
 
-## Step 3. Getting shapes of the plots
 
-
-We develop a set of functions in a separate file, which are used to extract plots data here.
+### 3.2 Downloading 3 digit codes for each plot
 
 
 ```{r}
@@ -760,5 +810,38 @@ source(here("02-plots-harvesting-functions.R"))
 
 
 ```
+
+
+
+### 3.3 Getting additional plots with 4 digits which were ommited at first run
+
+
+
+### 3.4 Cleaning plot-level data and saving it clean
+
+
+
+## Step 4. Getting metadata
+
+
+```{r}
+# library(httr)
+# library(tidyverse)
+# r <- POST("http://www.aisgzk.kz/aisgzk/Index/FindObjInfoForMap", 
+#           body = list(kadNum = "02025009085"))
+# 
+# content(r, type = "text") %>% 
+#   jsonlite::fromJSON() %>% 
+#   as_tibble()
+```
+
+
+
+### 4.1 Extracting metadata for existing cadatre codes
+
+
+
+### 4.2 Cleaning/saving metadata for existing cadastre codes
+
 
 
