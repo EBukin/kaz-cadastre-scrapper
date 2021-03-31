@@ -234,7 +234,9 @@ all_rayons %>%
   list.files(full.names = T) %>%
   map_dfr( ~ read_rds(.x)) %>%
   filter(!is.na(actual_ray_id)) %>%
-  mutate(obl_id2 = str_c("obl-", obl_id, "-r-",  rayon_id, "-ar-", actual_ray_id)) %>%
+  mutate(obl_id2 = str_c("obl-", obl_id
+                         # , "-r-",  rayon_id, "-ar-", actual_ray_id
+                         )) %>%
   group_by(obl_id2) %>%
   nest() %>%
   purrr::pwalk(~ {
