@@ -42,155 +42,6 @@ index_kaz_adm <-
 # 
 # raw_base_fldr <- "~/kaz-cad-raw/" %>% normalizePath()
 
-# Functions ====================================================
-
-# Function for getting one digit geometry on top of the call.
-get_one_digit_geometries <- function(line, geom_call) {
-  0:9 %>%
-    map_dfr( ~ {
-      # browser()
-      inp <-
-        line %>%
-        mutate(new_digit = .x) %>%
-        mutate(url = glue(geom_call))
-      out <-
-        inp$url %>%
-        get_res_geo_attrs()
-      bind_cols(inp, out)
-    })
-}
-
-# local_call <- "http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText={obl_id}{new_digit}&contains=true&searchFields=KAD_NOMER&layers={75}&returnGeometry=true&f=pjson"
-# extra_digit <-
-#   tibble(obl_id = 03050) %>%
-#   get_one_digit_geometries(local_call)
-
-
-# Harvesting all rayons IDs in one layer ------------------------------------
-
-
-# geom_call <- "http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText={obl_id}{base_digit}{new_digit}&contains=true&searchFields=KAD_NOMER&layers={leyer_id}&returnGeometry=true&f=pjson"
-# one_line <- to_harvest %>% slice(2) %>% mutate(base_digit = "")
-# 
-
-get_rayons_for_one_line <-
-  function(one_line,
-           geom_call,
-           raw_base_fldr = "~/kaz-cad-raw/" ) {
-    intem_file_name <-
-      str_c("layer-", one_line$id, "_obl-", one_line$obl_id, ".rds")
-    
-    
-    # Uncomment to reharvest rayons
-    one_digit_geo <-
-      get_one_digit_geometries(one_line, geom_call)
-    
-    
-    pb <- progress::progress_bar$new(#
-      total = 10,
-      force = FALSE,
-      format = "two-dig-rayons :spin :current/:total (dig-:sttep) [:bar] :percent in :elapsedfull ETA: :eta")
-    
-    
-    two_digit_geo <-
-      one_digit_geo %>%
-      mutate(base_digit = str_c(base_digit, new_digit)) %>%
-      select(any_of(names(one_line))) %>%
-      distinct() %>%
-      pmap( ~ {
-        pb$tick()
-        the_line <- rlang::dots_list(...) %>% as_tibble()
-        get_one_digit_geometries(the_line, geom_call)
-      }) %>%
-      bind_rows()
-    
-    all_rayons_raw <-
-      two_digit_geo %>%
-      bind_rows(one_digit_geo)
-    
-    all_rayons <-
-      all_rayons_raw %>%
-      unnest(response_geo_attrs) %>%
-      mutate(actual_ray_id = str_sub(KAD_NOMER, 3, 5)) %>%
-      distinct(actual_ray_id) %>%
-      pmap_dfr( ~ {
-        rlang::dots_list(...) %>%
-          as_tibble() %>%
-          bind_cols(one_line)
-      })
-    
-    
-    all_ray_file <-
-      file.path(raw_base_fldr,
-                "all-rayons-index",
-                intem_file_name) %>%
-      normalizePath()
-    
-    write_rds(all_rayons, all_ray_file)
-    
-    harvested_data_file <-
-      file.path(raw_base_fldr,
-                "all-rayons-raw",
-                intem_file_name) %>%
-      normalizePath()
-    
-    write_rds(all_rayons_raw, harvested_data_file, compress = "gz")
-    
-  }
-
-
-# Actual harvesting of the rayon indexes
-harvested_layers <-
-  "~/kaz-cad-raw/all-rayons-index/" %>% 
-  list.files() %>% 
-  tibble(name = .) %>% 
-    tidyr::separate(name, c("code1", "layer", "code2", "obl"))
-  
-  
-ray_call <- "http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText={obl_id}{base_digit}{new_digit}&contains=true&searchFields=KAD_NOMER&layers={leyer_id}&returnGeometry=true&f=pjson"
-
-
-# index_kaz_adm %>% 
-#   filter(obl_id == "03", !id %in% as.numeric(harvested_layers$layer)) %>% 
-#   mutate(base_digit = "") %>% 
-#   pmap(~{
-#     rlang::dots_list(...) %>% 
-#       as_tibble() %>% 
-#       get_rayons_for_one_line(ray_call)
-#   })
-  
-
-# Same harvesting in parallel
-parallel_rayons_ids <- function(lines_to_harvest) {
-  p <- progressor(steps = nrow(lines_to_harvest))
-  lines_to_harvest %>%
-    furrr::future_pmap( ~ {
-      rlang::dots_list(...) %>%
-        as_tibble() %>%
-        get_rayons_for_one_line(ray_call)
-    })
-}
-
-
-library(progressr)
-library(furrr)
-
-handlers(global = TRUE)
-handlers(list(
-  handler_progress(
-    format   = ":spin :current/:total [:bar] :percent in :elapsed ETA: :eta",
-    width    = 80,
-    complete = "+"
-  )
-))
-
-plan(multisession)
-
-index_kaz_adm %>%
-  filter(obl_id == "03",!id %in% as.numeric(harvested_layers$layer)) %>%
-  mutate(base_digit = "") %>%
-  parallel_rayons_ids()
-
 
 ## Harvesting all kvartals id -----------------------------------------
 
@@ -213,7 +64,7 @@ all_rayons <-
   slice(1) %>% 
   pull(path) %>% 
   read_rds()
-      
+
 
 one_rayon <- all_rayons %>% slice(1)
 
@@ -277,7 +128,7 @@ three_digit_kvartal_index <-
   unnest(response_geo_attrs ) %>%
   filter(!empty) %>%
   mutate(actual_kvartal_id = str_c(base_digit, new_digit)) %>%
-    select(id, leyer_id, name, obl_id, rayon_id, actual_ray_id, "actual_kvartal_id") %>% 
+  select(id, leyer_id, name, obl_id, rayon_id, actual_ray_id, "actual_kvartal_id") %>% 
   distinct() %>% 
   arrange(actual_ray_id , actual_kvartal_id)
 
@@ -335,5 +186,3 @@ all_kvartals <-
   slice(1) %>% 
   pull(path) %>% 
   read_rds()
-
-
