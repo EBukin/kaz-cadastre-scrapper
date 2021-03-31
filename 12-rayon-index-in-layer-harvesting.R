@@ -126,6 +126,7 @@ harvested_layers <-
     tidyr::separate(name, c("code1", "layer", "code2", "obl"))
   
   
+ray_call <- "http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText={obl_id}{base_digit}{new_digit}&contains=true&searchFields=KAD_NOMER&layers={leyer_id}&returnGeometry=true&f=pjson"
 
 index_kaz_adm %>%
   filter(obl_id == "03", !id %in% as.numeric(harvested_layers$layer)) %>%
