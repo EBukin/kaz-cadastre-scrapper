@@ -558,7 +558,6 @@ This is all done in a separate file.
 ```{r, echo=FALSE}
 poly_dta <- 
   read_rds("data-clean/10-sarah-request/kaz-akmol-3-ray-1ha-clean.rds") %>% 
-  filter(Shape_Area > 10000) %>% 
   st_as_sf() %>% 
   left_join(rayons_index %>% select(leyer_id, obl_rus, raj_rus ), 
             c("layerId"  = "leyer_id"))
@@ -572,6 +571,7 @@ Plotting all 1 ha and larger plots:
 ```{r, echo=FALSE}
 out_gg <- 
   poly_dta %>% 
+  filter(Shape_Area > 10000) %>% 
   ggplot() + 
   aes(fill = raj_rus) + 
   geom_sf() + 
@@ -596,6 +596,7 @@ library(mapview)
 #     filter(leyer_id %in% unique(poly_dta$layerId))
 
 poly_dta %>% 
+  filter(Shape_Area > 10000) %>% 
   select(cadastre_id, obl_rus, raj_rus, CATEGORY_RUS:NAZV) %>% 
 mapview(
     map.type =
@@ -607,37 +608,43 @@ mapview(
         "OpenTopoMap"
       ),
     zcol = "raj_rus",
-    burst = TRUE,
-    options = leaflet::layersControlOptions(collapsed = FALSE)
+    burst = TRUE
   )
 
-poly_dta %>% 
-  filter(actual_rayon_id != rayon_id) %>% 
-  st_drop_geometry() %>% 
-  as_tibble() %>% 
+poly_dta %>%
+  filter(actual_rayon_id != rayon_id) %>%
+  st_drop_geometry() %>%
+  as_tibble() %>%
   distinct(rayon_id, actual_rayon_id, CATEGORY_RUS)
 
-poly_dta %>% 
-  filter(actual_rayon_id != rayon_id) %>% 
-  st_drop_geometry() %>% 
-  as_tibble() %>% 
+poly_dta %>%
+  filter(actual_rayon_id != rayon_id) %>%
+  st_drop_geometry() %>%
+  as_tibble() %>%
   distinct(rayon_id, actual_rayon_id, PRAVO_RUS)
 ```   
 
 
 ## Step 4. Getting metadata for existing cadatre codes
 
-In progress. 
+Harvested in a separate document. Below is the summary of the main features of the dataset.
 
 ```{r, echo=FALSE}
-# library(httr)
-# library(tidyverse)
-# r <- POST("http://www.aisgzk.kz/aisgzk/Index/FindObjInfoForMap", 
-#           body = list(kadNum = "02025009085"))
-# 
-# content(r, type = "text") %>% 
-#   jsonlite::fromJSON() %>% 
-#   as_tibble()
+parced_metadata_clean <- 
+  read_rds(here("data-clean","06-plots-metadata-clean.rds"))
+
+parced_metadata_clean %>% glimpse()
+
+parced_metadata_clean %>% count(rus_predostavlennoe_pravo, sort = T)
+
+parced_metadata_clean %>% count(rus_kategoria_zemel, sort = T)
+
+parced_metadata_clean %>% count(rus_celevoe_naznacenie, sort = T)
+
+parced_metadata_clean %>% count(rus_zemlepolzovateli, sort = T)
+
+parced_metadata_clean %>% count(rus_ogranicenia, sort = T)
+
 ```
 
 

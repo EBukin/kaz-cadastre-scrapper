@@ -21,11 +21,11 @@ The goal of kaz-cadastre-scrapper is to harvest raster and  vector GIS data alon
 -  [http://www.aisgzk.kz/aisgzk/ru/content/maps](http://www.aisgzk.kz/aisgzk/ru/content/maps?type=ug)
 
 
-This is a tidious process, however, mapserver seems to contain some information in poligonised format.
+This is a tedious process, however, map server seems to contain some information in polygon format.
 
 Generic access to the map servers API is available here: [http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/](http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/). All links are generally accessible through a Kaz in-built proxy.
 
-Here is the detailed JS code that displays the map and could be used as a reference for understing maps structure: [http://www.aisgzk.kz/aisgzk/js/maps.js](http://www.aisgzk.kz/aisgzk/js/maps.js)
+Here is the detailed JS code that displays the map and could be used as a reference for understanding maps structure: [http://www.aisgzk.kz/aisgzk/js/maps.js](http://www.aisgzk.kz/aisgzk/js/maps.js)
 
 Some key links: 
 
@@ -47,10 +47,10 @@ Some key links:
 
     -  pch_kart: '/aisgzk/Proxy/aisgzkPch_kart/MapServer',
     
--  Sebserver for requests on land plots consolidation (no data) 
+-  Sub-servers for requests on land plots consolidation (no data) 
 
     -   puSP: '/aisgzk/Proxy/GPServer/SoglProj/'
     -   puOOS: '/aisgzk/Proxy/GPServer/OpOcStoim/'
     -   puOKS: '/aisgzk/Proxy/GPServer/OpKachSost/'
     
--  Geometry untility service: gs: '/aisgzk/Proxy/Utilities/Geometry/GeometryServer',
+-  Geometry utility service: gs: '/aisgzk/Proxy/Utilities/Geometry/GeometryServer',
