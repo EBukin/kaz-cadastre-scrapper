@@ -40,3 +40,8 @@ vignettes/*.pdf
 
 
 data-raw/
+*shp/
+.shp
+.dbf
+.prj
+.shx

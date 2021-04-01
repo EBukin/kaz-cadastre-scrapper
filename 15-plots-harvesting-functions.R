@@ -163,11 +163,11 @@ if (nrow(plot_three_level_digits_clean) > 0) {
 
 
 
-# list.files("~/kaz-cad-raw/plot-3-dig/", full.names = T) %>%
+# list.files("~/kaz-cad-raw/plot-4-dig/", full.names = T) %>%
 #   map_dfr(read_rds) %>%
 #   mutate(base_digit = str_c(base_digit, new_digit)) %>%
-#   unnest(response_geo_attrs) %>%
-#   # filter(response_n_elements > 0, !exceededTransferLimit) %>%
+#   # unnest(response_geo_attrs) %>%
+#   filter(exceededTransferLimit) %>%
 #   select(leyer_id : base_digit, exceededTransferLimit, KAD_NOMER ) %>%
 #   distinct()
 
@@ -188,15 +188,13 @@ drop_nonalphanum <-
 translit_kaz <-
   . %>%
   stringi::stri_trans_general( "Kazakh-Latin/BGN") %>%
-  stringi::stri_trans_general("Latin-ASCII") %>%
-  drop_nonalphanum
+  stringi::stri_trans_general("Latin-ASCII")
 
 
 translit_rus <-
   . %>%
   stringi::stri_trans_general( "Cyrillic-Latin/BGN") %>%
-  stringi::stri_trans_general("Latin-ASCII") %>%
-  drop_nonalphanum
+  stringi::stri_trans_general("Latin-ASCII")
 
 
 
@@ -206,18 +204,19 @@ plots_indx <-
     # interm_one_folder,
     interm_two_folder,
     interm_three_folder,
-    interm_four_folder) %>%
+    interm_four_folder
+    ) %>%
   map( ~ list.files(.x, full.names = T)) %>%
   unlist() %>%
   map( ~ .x %>% read_rds() %>% mutate(path = .x))
 
-# # Remove unsuccessful harvests and 
-plots_indx %>%
-  bind_rows() %>%
-  filter(!response_success ) %>%
-  pull(path) %>%
-  unique() %>% 
-  map(~file.remove(.x))
+# # # Remove unsuccessful harvests and 
+# plots_indx %>%
+#   bind_rows() %>%
+#   filter(!response_success ) %>%
+#   pull(path) %>%
+#   unique() %>% 
+#   map(~file.remove(.x))
 
 
 extended_index <-
@@ -226,7 +225,7 @@ extended_index <-
   filter(!empty) %>%
   dplyr::filter(!is.na(KAD_NOMER)) %>% 
   group_by(KAD_NOMER) %>% 
-  mutate(n = n()) %>% 
+  mutate(n = row_number()) %>% 
   filter(n == 1) %>% 
   ungroup() %>% 
   mutate(
@@ -234,13 +233,13 @@ extended_index <-
     rayon_id = str_sub(layerName, 6, 8),
     actual_rayon_id = str_sub(KAD_NOMER, 3, 5),
     kvartal_id = str_sub(KAD_NOMER, 6, 8),
-    NAZV = NAZV %>% translit_kaz %>% drop_nonalphanum(),
-    CATEGORY_RUS = CATEGORY_RUS %>% translit_rus %>% drop_nonalphanum,
-    CATEGORY_KAZ  = CATEGORY_KAZ  %>% translit_kaz %>% drop_nonalphanum,
-    PRAVO_RUS   = PRAVO_RUS   %>% translit_rus %>% drop_nonalphanum,
-    PRAVO_KAZ   = PRAVO_KAZ   %>% translit_kaz %>% drop_nonalphanum,
-    TSN_RUS    = TSN_RUS    %>% translit_rus %>% drop_nonalphanum,
-    TSN_KAZ    = TSN_KAZ    %>% translit_kaz %>% drop_nonalphanum,
+    NAZV = NAZV %>% translit_kaz,
+    CATEGORY_RUS = CATEGORY_RUS %>% translit_rus,
+    CATEGORY_KAZ  = CATEGORY_KAZ  %>% translit_kaz ,
+    PRAVO_RUS   = PRAVO_RUS   %>% translit_rus ,
+    PRAVO_KAZ   = PRAVO_KAZ   %>% translit_kaz ,
+    TSN_RUS    = TSN_RUS    %>% translit_rus ,
+    TSN_KAZ    = TSN_KAZ    %>% translit_kaz ,
     Shape_Area = str_replace_all(Shape_Area, ",", "\\.") %>% as.numeric()
     ) %>% 
   select(
