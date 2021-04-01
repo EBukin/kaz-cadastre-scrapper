@@ -78,10 +78,11 @@ kvartals_digits_clean <-
   mutate(file_to = glue("{leyer_id}_{obl_id}_{rayon_id}_{base_digit}x.rds")) %>% 
   filter(!file_to %in% list.files(interm_one_folder))
 
-kvartals_digits_clean %>%
-  # sample_n(10) %>% 
-  parallel_harvest_one_extra_dig(interm_one_folder, find_plots_call_generic)
-
+if (nrow(kvartals_digits_clean) > 0) {
+  kvartals_digits_clean %>%
+    # sample_n(10) %>%
+    parallel_harvest_one_extra_dig(interm_one_folder, find_plots_call_generic)
+}
 
 # Two-digit + third harvesting  ========================================
 
@@ -101,16 +102,20 @@ plot_one_level_digits_clean <-
   ) %>% 
   filter(!file_to %in% harvested)
 
+if (nrow(plot_one_level_digits_clean) > 0) {
+  plot_one_level_digits_clean %>% 
+    # sample_n(10) %>% 
+    parallel_harvest_one_extra_dig(interm_two_folder, find_plots_call_generic)
+  
+}
 
-plot_one_level_digits_clean %>% 
-  # sample_n(10) %>% 
-  parallel_harvest_one_extra_dig(interm_two_folder, find_plots_call_generic)
+
 
 
 # three-digit + four harvesting  ========================================
 
 interm_three_folder <- "~/kaz-cad-raw/plot-3-dig/"
-harvested <- list.files(here(interm_two_folder))
+harvested <- list.files(here(interm_three_folder))
 
 plot_two_level_digits_clean <-
   list.files("~/kaz-cad-raw/plot-2-dig/", full.names = T) %>%
@@ -125,43 +130,193 @@ plot_two_level_digits_clean <-
   filter(!file_to %in% harvested)
 
 
-plot_two_level_digits_clean %>% 
-  # sample_n(10) %>% 
-  parallel_harvest_one_extra_dig(interm_three_folder, find_plots_call_generic)
-
-
-
+if (nrow(plot_two_level_digits_clean) > 0) {
+  plot_two_level_digits_clean %>%
+    # sample_n(10) %>%
+    parallel_harvest_one_extra_dig(interm_three_folder, find_plots_call_generic)
+}
 
 # four-digit + five harvesting  ========================================
 # 
-# interm_four_folder <- "~/kaz-cad-raw/plot-4-dig/"
-# harvested <- list.files(here(interm_two_folder))
-# 
-# plot_three_level_digits_clean <-
-#   list.files("~/kaz-cad-raw/plot-3-dig/", full.names = T) %>%
-#   map_dfr(read_rds) %>% 
-#   mutate(base_digit = str_c(base_digit, new_digit)) %>% 
-#   filter(response_n_elements > 0, exceededTransferLimit) %>% 
-#   select(leyer_id : base_digit) %>% 
-#   distinct() %>% 
-#   mutate(
-#     file_to = glue("{leyer_id}_{obl_id}_{rayon_id}_{base_digit}x.rds")
-#   ) %>% 
-#   filter(!file_to %in% harvested)
-# 
-# 
-# plot_three_level_digits_clean %>% 
-#   parallel_harvest_one_extra_dig(interm_four_folder, find_plots_call_generic)
-# 
-# 
-# 
+interm_four_folder <- "~/kaz-cad-raw/plot-4-dig/"
+harvested <- list.files(here(interm_four_folder))
+
+plot_three_level_digits_clean <-
+  list.files("~/kaz-cad-raw/plot-3-dig/", full.names = T) %>%
+  map_dfr(read_rds) %>%
+  mutate(base_digit = str_c(base_digit, new_digit)) %>%
+  filter(response_n_elements > 0, exceededTransferLimit) %>%
+  select(leyer_id : base_digit) %>%
+  distinct() %>%
+  mutate(
+    file_to = glue("{leyer_id}_{obl_id}_{rayon_id}_{base_digit}x.rds")
+  ) %>%
+  filter(!file_to %in% harvested)
+
+
+if (nrow(plot_three_level_digits_clean) > 0) {
+  plot_three_level_digits_clean %>%
+    parallel_harvest_one_extra_dig(interm_four_folder, find_plots_call_generic)
+  
+}
+
+
+
+
 # list.files("~/kaz-cad-raw/plot-3-dig/", full.names = T) %>%
-#   map_dfr(read_rds) %>% 
-#   mutate(base_digit = str_c(base_digit, new_digit)) %>% 
-#   unnest(response_geo_attrs) %>% 
-#   # filter(response_n_elements > 0, !exceededTransferLimit) %>% 
-#   select(leyer_id : base_digit, exceededTransferLimit, KAD_NOMER ) %>% 
-#   distinct() 
+#   map_dfr(read_rds) %>%
+#   mutate(base_digit = str_c(base_digit, new_digit)) %>%
+#   unnest(response_geo_attrs) %>%
+#   # filter(response_n_elements > 0, !exceededTransferLimit) %>%
+#   select(leyer_id : base_digit, exceededTransferLimit, KAD_NOMER ) %>%
+#   distinct()
+
+
+
+# Resaving all data in one file =========================================
+
+
+drop_nonalphanum <-
+  . %>%
+  stringi::stri_trans_general("Latin-ASCII" ) %>%
+  stringi::stri_trans_general("Any-Hex/Unicode" )  %>%
+  str_replace_all("U\\+02B9", "") %>%
+  stringi::stri_trans_general("Hex-Any/Unicode") %>%
+  str_replace_all("[^[:alnum:]_]", "")
+
+
+translit_kaz <-
+  . %>%
+  stringi::stri_trans_general( "Kazakh-Latin/BGN") %>%
+  stringi::stri_trans_general("Latin-ASCII") %>%
+  drop_nonalphanum
+
+
+translit_rus <-
+  . %>%
+  stringi::stri_trans_general( "Cyrillic-Latin/BGN") %>%
+  stringi::stri_trans_general("Latin-ASCII") %>%
+  drop_nonalphanum
+
+
+
+
+plots_indx <-
+  list(
+    # interm_one_folder,
+    interm_two_folder,
+    interm_three_folder,
+    interm_four_folder) %>%
+  map( ~ list.files(.x, full.names = T)) %>%
+  unlist() %>%
+  map( ~ .x %>% read_rds() %>% mutate(path = .x))
+
+# # Remove unsuccessful harvests and 
+plots_indx %>%
+  bind_rows() %>%
+  filter(!response_success ) %>%
+  pull(path) %>%
+  unique() %>% 
+  map(~file.remove(.x))
+
+
+extended_index <-
+  plots_indx %>%
+  map_dfr( ~ .x %>% pull(response_geo_attrs)) %>%
+  filter(!empty) %>%
+  dplyr::filter(!is.na(KAD_NOMER)) %>% 
+  group_by(KAD_NOMER) %>% 
+  mutate(n = n()) %>% 
+  filter(n == 1) %>% 
+  ungroup() %>% 
+  mutate(
+    obl_id = str_sub(layerName, 3, 4),
+    rayon_id = str_sub(layerName, 6, 8),
+    actual_rayon_id = str_sub(KAD_NOMER, 3, 5),
+    kvartal_id = str_sub(KAD_NOMER, 6, 8),
+    NAZV = NAZV %>% translit_kaz %>% drop_nonalphanum(),
+    CATEGORY_RUS = CATEGORY_RUS %>% translit_rus %>% drop_nonalphanum,
+    CATEGORY_KAZ  = CATEGORY_KAZ  %>% translit_kaz %>% drop_nonalphanum,
+    PRAVO_RUS   = PRAVO_RUS   %>% translit_rus %>% drop_nonalphanum,
+    PRAVO_KAZ   = PRAVO_KAZ   %>% translit_kaz %>% drop_nonalphanum,
+    TSN_RUS    = TSN_RUS    %>% translit_rus %>% drop_nonalphanum,
+    TSN_KAZ    = TSN_KAZ    %>% translit_kaz %>% drop_nonalphanum,
+    Shape_Area = str_replace_all(Shape_Area, ",", "\\.") %>% as.numeric()
+    ) %>% 
+  select(
+    cadastre_id = KAD_NOMER, 
+    layerId, obl_id, rayon_id, actual_rayon_id, kvartal_id, 
+    CATEGORY_RUS, CATEGORY_KAZ, PRAVO_RUS, PRAVO_KAZ, TSN_RUS, TSN_KAZ, NAZV,
+    Shape_Area, Shape_Length)
+
+
+
+# Saving all ==================================
+
+extended_index %>%
+  write_rds(
+    here(
+      "data-clean",
+      "05-plots-shapes",
+      "kaz-all-plots-shapes-clean.rds"
+    ),
+    compress = "gz"
+  )
+# 
+sarah_export <-
+  tibble(obl_id = "03",
+         rayon_id = c("323", "044", '050')) %>% 
+  inner_join(extended_index)
+
+
+sarah_export %>%
+  write_rds(
+    here(
+      "data-clean",
+      "10-sarah-request",
+      "kaz-akmol-3-ray-clean.rds"
+    ),
+    compress = "gz"
+  )
+
+
+
+sarah_export %>%
+  st_write(
+    here(
+      "data-clean",
+      "10-sarah-request",
+      "kaz-akmol-3-ray-clean-shp",
+      "kaz-akmol-3-ray-clean.shp"
+    )
+  )
+
+
+# 1 ha and more
+sarah_export %>%
+  filter(Shape_Area > 10000)  %>% 
+  write_rds(
+    here(
+      "data-clean",
+      "10-sarah-request",
+      "kaz-akmol-3-ray-1ha-clean.rds"
+    ),
+    compress = "gz"
+  )
+
+
+
+sarah_export %>%
+  filter(Shape_Area > 10000)  %>% 
+  st_write(
+    here(
+      "data-clean",
+      "10-sarah-request",
+      "kaz-akmol-3-ray-1ha-clean-shp",
+      "kaz-akmol-3-ray-1ha-clean.shp"
+    )
+  )
+# 
 
 # 
 # # Loading all harvested geometries and saving in one file -----------------

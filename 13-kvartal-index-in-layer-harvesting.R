@@ -38,8 +38,9 @@ index_kaz_adm <-
 
 all_rayons <-
   here("data-clean", "03-rayon-indexes", "obl-03.rds") %>%
-  read_rds() %>% 
-  filter(obl_id == "03", rayon_id %in% c("323","044","050"))
+  read_rds() 
+# %>% 
+#   filter(obl_id == "03", rayon_id %in% c("323","044","050"))
 
 raw_base_fldr <- "~/kaz-cad-raw/" %>% normalizePath()
 
@@ -84,15 +85,16 @@ get_kvartals_for_one_line <-
       select(any_of(names(one_rayon))) %>%
       distinct()
     
-    pbkv2 <- progress::progress_bar$new(#
-      total = nrow(two_dig_harv),
-      force = FALSE,
-      format = "two-dig-kvartal :spin :current/:total [:bar] :percent in :elapsedfull ETA: :eta")
+    # pbkv2 <- progress::progress_bar$new(#
+    #   total = nrow(two_dig_harv),
+    #   force = FALSE,
+    #   format = "two-dig-kvartal :spin :current/:total [:bar] :percent in :elapsedfull ETA: :eta")
     
+    cat("two digits + \n")
     two_digit_kvartal <-
       two_dig_harv %>%
       pmap( ~ {
-        pbkv2$tick()
+        # pbkv2$tick()
         the_line <- rlang::dots_list(...) %>% as_tibble()
         get_one_digit_geometries(the_line, kvartal_call)
       }) %>%
@@ -107,17 +109,18 @@ get_kvartals_for_one_line <-
       select(any_of(names(one_rayon))) %>%
       distinct()
     
-    pbkv3 <- progress::progress_bar$new(
-      #
-      total = nrow(three_dig_harv),
-      force = FALSE,
-      format = "three-dig-kvartal :spin :current/:total [:bar] :percent in :elapsedfull ETA: :eta"
-    )
+    # pbkv3 <- progress::progress_bar$new(
+    #   #
+    #   total = nrow(three_dig_harv),
+    #   force = FALSE,
+    #   format = "three-dig-kvartal :spin :current/:total [:bar] :percent in :elapsedfull ETA: :eta"
+    # )
     
+    cat("three digits + \n")
     three_digit_kvartal <-
       three_dig_harv %>%
       pmap( ~ {
-        pbkv3$tick()
+        # pbkv3$tick()
         the_line <- rlang::dots_list(...) %>% as_tibble()
         get_one_digit_geometries(the_line, kvartal_call)
       }) %>%

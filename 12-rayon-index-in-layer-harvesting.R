@@ -64,19 +64,19 @@ get_rayons_for_one_line <-
       get_one_digit_geometries(one_line, geom_call)
     
     
-    pb <- progress::progress_bar$new(#
-      total = 10,
-      force = FALSE,
-      format = "two-dig-rayons :spin :current/:total (dig-:sttep) [:bar] :percent in :elapsedfull ETA: :eta")
+    # pb <- progress::progress_bar$new(#
+    #   total = 10,
+    #   force = FALSE,
+    #   format = "two-dig-rayons :spin :current/:total (dig-:sttep) [:bar] :percent in :elapsedfull ETA: :eta")
     
-    
+    cat("two digits + \n")
     two_digit_geo <-
       one_digit_geo %>%
       mutate(base_digit = str_c(base_digit, new_digit)) %>%
       select(any_of(names(one_line))) %>%
       distinct() %>%
       pmap( ~ {
-        pb$tick()
+        # pb$tick()
         the_line <- rlang::dots_list(...) %>% as_tibble()
         get_one_digit_geometries(the_line, geom_call)
       }) %>%
@@ -91,7 +91,7 @@ get_rayons_for_one_line <-
       unnest(response_geo_attrs) %>%
       mutate(actual_ray_id = str_sub(KAD_NOMER, 3, 5)) %>%
       distinct(actual_ray_id) %>%
-      filter(!is.na(actual_ray_id))
+      filter(!is.na(actual_ray_id)) %>% 
       pmap_dfr( ~ {
         rlang::dots_list(...) %>%
           as_tibble() %>%

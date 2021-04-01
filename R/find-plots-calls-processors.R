@@ -45,6 +45,17 @@ get_response_json <- function(one_call_raw) {
   }, silent = T
   )
   
+  
+  if ("try-error" %in% class(out)) {
+    out <- try({
+      one_call_raw %>%
+        stringi::stri_trans_general("Latin-ASCII") %>%
+        str_replace_all("\\n", "") %>%
+        jsonlite::fromJSON(simplifyDataFrame = F, simplifyVector = F)
+    }, silent = T)
+    
+  }
+  
   if ("try-error" %in% class(out)) return(list( error = TRUE)) else return(out)
 }
 
@@ -67,30 +78,86 @@ get_response_json <- function(one_call_raw) {
 #   get_response_json
 
 
-# iconv(resp, from = "1252", to = "unicode")
-#
-# resp %>%
-#   stri_trans_general("Any-Hex")
-#
-#
+# http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText=0304408131&contains=true&searchFields=KAD_NOMER&layers=50&returnGeometry=true&f=pjson
+# http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText=0304408131&contains=true&searchFields=KAD_NOMER&layers=50&returnGeometry=true&f=pjson
+# http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText=0304410994&contains=true&searchFields=KAD_NOMER&layers=50&returnGeometry=true&f=pjson
+# http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText=0304412692&contains=true&searchFields=KAD_NOMER&layers=50&returnGeometry=true&f=pjson
+# http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText=0304415667&contains=true&searchFields=KAD_NOMER&layers=50&returnGeometry=true&f=pjson
+# http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText=0304422137&contains=true&searchFields=KAD_NOMER&layers=50&returnGeometry=true&f=pjson
+# http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText=0304425168&contains=true&searchFields=KAD_NOMER&layers=50&returnGeometry=true&f=pjson
+# http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText=0304425772&contains=true&searchFields=KAD_NOMER&layers=50&returnGeometry=true&f=pjson
+# http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText=0304429540&contains=true&searchFields=KAD_NOMER&layers=50&returnGeometry=true&f=pjson
+# http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText=0305000207&contains=true&searchFields=KAD_NOMER&layers=54&returnGeometry=true&f=pjson
+# http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText=0305001778&contains=true&searchFields=KAD_NOMER&layers=54&returnGeometry=true&f=pjson
+# http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText=03044115109&contains=true&searchFields=KAD_NOMER&layers=50&returnGeometry=true&f=pjson
 
-# # enc2utf8(resp)  %>%
+# cll <- "http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText=0304401569&contains=true&searchFields=KAD_NOMER&layers=50&returnGeometry=true&f=pjson"
+# cll %>%
+#   get_response_raw %>%
+#   get_response_json
 # 
-#   # str_replace_all("\\u2116+", "") %>%
 # 
+# # iconv(resp, from = "1252", to = "unicode")
+# #
+# # resp %>%
+# #   stri_trans_general("Any-Hex")
+# #
+# #
 # 
+# # # enc2utf8(resp)  %>%
+# # 
+# #   # str_replace_all("\\u2116+", "") %>%
+# # 
+# # 
 # resp <-
 #   cll %>%
 #   get_response_raw
 # 
-# resp %>%
-#   str_locate_all('\\"\\u2116') %>%
+# resp %>% 
+#   stringi::stri_trans_general("Latin-ASCII") %>%
+#   # stringi::stri_trans_general("ru-ru_Latn/BGN") %>%  
+#   # str_replace_all('\\\\\"', "")  %>%
+#   # str_replace_all("\\\\", "") %>%
+#   # str_replace_all("\\\\\\\\", "") %>%
+#   # str_replace_all("\\\\\\\\\\\\", "") %>%
+#   str_replace_all("\\n", "") %>%
+#   # str_replace_all("\\\\", "") %>%
+#   # str_replace_all("\\\\", "") %>%
+#   # str_replace_all("\\\\", "") %>%
+#     jsonlite::fromJSON()
+# # 
+# # aaa <-
+# resp %>% 
+#   # stringi::stri_trans_general("Latin-ASCII") %>% 
+#   # stringi::stri_trans_general("ru-ru_Latn/BGN") %>% 
+#   # str_replace_all('\\\\\"', "")  %>%
+#   # str_replace_all("([\\u005C]).{1,3}", "") %>% 
+#   # str_replace_all("\\\\", "") %>%
+#   # str_replace_all("\\\\\\\\", "") %>%
+#   # str_replace_all("\\\\\\\\", "")  %>%
+#   # str_replace_all("(\\\\){1,}", "") %>%
+#   # str_replace_all("\\\\", "") %>%
+#   # str_replace_all("\\\\", "") %>%
+#   # str_replace_all("\\\\", "") %>%
+#   str_locate_all('\\n') %>%
 #   `[[`(1) %>%
 #   as_tibble() %>%
 #   pmap(~{
 #     resp %>%
-#       str_sub(.x - 10, .x + 10)
-#   }) %>%
+#       str_sub(.x - 10, .x + 15) #%>% 
+#       # str_replace_all('\\\\\"', "")  #%>%
+#       # str_replace_all("([\\u005C])", "")
+#   }) 
+# 
+# 
+# 
+# 
+# aaa %>% 
+#   str_replace_all("([\\u005C]).{1,3}",)
+# aaa %>% 
+#   stri_trans_general("Any-Hex")
+
+# %>%
 #   map(~.x %>% stringi::stri_trans_general("Latin-ASCII") %>%
 #         str_replace_all("\\\\", ""))
 # 
@@ -334,6 +401,28 @@ get_res_geo_attrs <- function(url) {
 #   "http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText=0304423080&contains=true&searchFields=KAD_NOMER&layers=50&returnGeometry=true&f=pjson"
 # ) %>%
 #   map_dfr(get_res_geo_attrs)
+
+
+# These return as unsuccessful
+# http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText=0304401569&contains=true&searchFields=KAD_NOMER&layers=50&returnGeometry=true&f=pjson
+# http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText=0304408131&contains=true&searchFields=KAD_NOMER&layers=50&returnGeometry=true&f=pjson
+# http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText=0304410994&contains=true&searchFields=KAD_NOMER&layers=50&returnGeometry=true&f=pjson
+# http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText=0304412692&contains=true&searchFields=KAD_NOMER&layers=50&returnGeometry=true&f=pjson
+# http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText=0304415667&contains=true&searchFields=KAD_NOMER&layers=50&returnGeometry=true&f=pjson
+# http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText=0304422137&contains=true&searchFields=KAD_NOMER&layers=50&returnGeometry=true&f=pjson
+# http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText=0304425168&contains=true&searchFields=KAD_NOMER&layers=50&returnGeometry=true&f=pjson
+# http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText=0304425772&contains=true&searchFields=KAD_NOMER&layers=50&returnGeometry=true&f=pjson
+# http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText=0304429540&contains=true&searchFields=KAD_NOMER&layers=50&returnGeometry=true&f=pjson
+# http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText=0305000207&contains=true&searchFields=KAD_NOMER&layers=54&returnGeometry=true&f=pjson
+# http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText=0305001778&contains=true&searchFields=KAD_NOMER&layers=54&returnGeometry=true&f=pjson
+# http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText=03044115109&contains=true&searchFields=KAD_NOMER&layers=50&returnGeometry=true&f=pjson
+
+# # Example with empty responce
+# cll <- "http://www.aisgzk.kz/aisgzk/Proxy/aisgzkZem2/MapServer/find?searchText=0304401569&contains=true&searchFields=KAD_NOMER&layers=50&returnGeometry=true&f=pjson"
+# 
+# resp <-
+#   cll %>%
+#     get_res_geo_attrs
 
 
 # manycals_out %>%
