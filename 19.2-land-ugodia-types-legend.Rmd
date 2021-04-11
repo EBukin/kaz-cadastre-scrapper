@@ -1,0 +1,254 @@
+---
+title: "Scrapping ugodia"
+author: "Eduard Bukin"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+editor_options:
+  chunk_output_type: console
+---
+
+
+
+```{r setup, echo = FALSE, warning=FALSE}
+library(pacman)
+pacman::p_load(sf, here, fs, tidyverse, stringi, jsonlite, 
+               httr, RCurl, progress, rgdal, glue, progressr)
+force_reharvest <- FALSE
+# knitr::opts_chunk(warning=FALSE, message = FALSE)
+```
+
+There are 4 layers on the server and each layer has a different legend set. Below, we plot legend images by layers.
+
+```{r echo = FALSE}
+# leg_url <- "http://www.aisgzk.kz/aisgzk/Proxy/aisgzkUgL/MapServer/legend?f=pjson"
+# leg_json <-
+#   jsonlite::fromJSON(leg_url) %>%
+#   as_tibble()
+# leg_json$layers$legend <-
+#   map(leg_json$layers$legend, as_tibble)
+# leg_json %>% write_rds(here("data-raw", "19.2-land-ugodia-legend.rds"))
+leg_json <- read_rds(here("data-raw", "19.2-land-ugodia-legend.rds"))
+
+# glimpse(leg_json$layers)
+# glimpse(leg_json$layers$legend)
+```
+
+
+
+```{r echo = FALSE, fig.height=26, fig.width=18, results='asis'}
+dec_base64_img <- function(encoded_img) {
+  tmp_raw_img <- tempfile(fileext = "")
+  inconn <- file(tmp_raw_img, "wb")
+  writeBin(encoded_img, inconn)
+  close(inconn)
+  tmp_png_img <- tempfile(fileext = ".png")
+  inconn <- file(tmp_raw_img, "rb")
+  outconn <- file(tmp_png_img, "wb")
+  base64enc::base64decode(what = inconn, output = outconn)
+  close(inconn)
+  close(outconn)
+  tmp_png_img
+}
+
+
+
+fill_img <- 
+  leg_json$layers$legend[[1]]$imageData %>%
+  sample(1) %>% 
+  dec_base64_img
+
+
+# remotes::install_github("coolbutuseless/ggpattern")
+library(ggtextures)
+# library(magick)
+
+
+# magimg <- 
+# fill_img %>% 
+# magick::image_read() 
+# magimg %>% magick::image_ggplot()
+
+# ggplot() +
+#   aes(
+#     xmin = 0,
+#     xmax = 1,
+#     ymin = 0,
+#     ymax = 1,
+#     image = fill_img
+#   ) +
+#   geom_textured_rect(img_width = unit(20, "pt"),
+#                      fill = "white",
+#                      colour = "white") +
+#   # geom_text()
+#   theme_void()
+
+
+
+space = 2
+
+layer_dta <-
+  str_c("layer: ",
+        leg_json$layers$layerName,
+        "; ID:",
+        leg_json$layers$layerId) %>%
+  map2_dfr(leg_json$layers$legend, ~ {
+    mutate(.y, layer_name = .x)
+  }) %>%
+  group_by(layer_name) %>%
+  mutate(values = map_chr(values, ~ {
+    if (is.null(.x))
+      ""
+    else
+      .x
+  })) %>%
+  mutate(
+    across(
+      c(label, values),
+      ~ stringi::stri_trans_general(., "Cyrillic-Latin/BGN") %>%
+        stringi::stri_trans_general("Latin-ASCII") %>%
+        str_replace_all("[^[:alnum:] ]", "")
+    ),
+    label = str_c(label, ". API val: ", values),
+    ing_path = map_chr(imageData, dec_base64_img),
+    ymin = row_number() * space,
+    ymax = ymin + space * 0.9
+  ) %>%
+  ungroup()
+
+
+layer_dta %>%
+  group_by(layer_name) %>%
+  nest() %>%
+  pwalk(~ {
+    if (nrow(.y) < 100 & nrow(.y) > 10) {
+      cat("\n\n\n## ", .x, "\n\n\n")
+      gggg <-
+        .y %>%
+        # mutate(pages = row_number() %/% 40) %>%
+        mutate(pages = row_number() %% 3) %>%
+        group_by(pages) %>%
+        mutate(ymin = row_number() * space,
+               ymax = ymin + space * 0.9) %>%
+        ungroup() %>%
+        ggplot() +
+        aes(
+          xmin = 0,
+          xmax = space * 2,
+          ymin = ymin,
+          ymax = ymax,
+          x = space * 2 * 1.05,
+          y = (ymax - ymin) / 2 + ymin,
+          label = label,
+          image = ing_path
+        ) +
+        # geom_rect_pattern() +
+        geom_textured_rect(img_width = unit(20, "pt"),
+                           fill = "white",
+                           colour = "black") +
+        geom_label(hjust  = "left") +
+        theme_void() +
+        expand_limits(x = c(0, space * 4)) +
+        facet_wrap(. ~ pages, nrow = 1) +
+        scale_y_continuous(trans = "reverse")
+      print(gggg)
+      cat("\n\n\n\\pagebreak")
+    } else if (nrow(.y) > 100) {
+      # cat("\n\n\n\\newpage")
+      cat("\n\n\n## ", .x, "\n\n\n")
+      gggg <-
+        .y %>%
+        mutate(pages1 = row_number() %/% 91) %>%
+        group_by(pages1) %>%
+        nest() %>%
+        pwalk(~ {
+          gggg <-
+            .y %>%
+            mutate(pages = row_number() %% 3) %>%
+            group_by(pages) %>%
+            mutate(ymin = row_number() * space,
+                   ymax = ymin + space * 0.9) %>%
+            ungroup() %>%
+            ggplot() +
+            aes(
+              xmin = 0,
+              xmax = space * 2,
+              ymin = ymin,
+              ymax = ymax,
+              x = space * 2 * 1.05,
+              y = (ymax - ymin) / 2 + ymin,
+              label = label,
+              image = ing_path
+            ) +
+            # geom_rect_pattern() +
+            geom_textured_rect(
+              img_width = unit(20, "pt"),
+              fill = "white",
+              colour = "black"
+            ) +
+            geom_label(hjust  = "left") +
+            theme_void() +
+            expand_limits(x = c(0, space * 4)) +
+            facet_wrap(. ~ pages, nrow = 1) +
+            scale_y_continuous(trans = "reverse")
+          
+          
+          print(gggg)
+          cat("\n\n\n\\pagebreak")
+        })
+    }
+  })
+
+```
+
+
+```{r echo=FALSE, results='asis'}
+
+
+# cat("\n\n\n\\newpage")
+layer_dta %>%
+  group_by(layer_name) %>%
+  nest() %>%
+  pwalk(~ {
+    if (nrow(.y) < 10) {
+      # cat("\n\n\n\\newpage")
+      cat("\n\n\n## ", .x, "\n\n\n")
+      gggg <-
+        .y %>%
+        # mutate(pages = row_number() %/% 40) %>%
+        mutate(pages = row_number() %% 3) %>%
+        group_by(pages) %>%
+        mutate(ymin = row_number() * space,
+               ymax = ymin + space * 0.9) %>%
+        ungroup() %>%
+        ggplot() +
+        aes(
+          xmin = 0,
+          xmax = space * 2,
+          ymin = ymin,
+          ymax = ymax,
+          x = space * 2 * 1.05,
+          y = (ymax - ymin) / 2 + ymin,
+          label = label,
+          image = ing_path
+        ) +
+        # geom_rect_pattern() +
+        geom_textured_rect(img_width = unit(20, "pt"),
+                           fill = "white",
+                           colour = "black") +
+        geom_label(hjust  = "left") +
+        theme_void() +
+        expand_limits(x = c(0, space * 4)) +
+        facet_wrap(. ~ pages, nrow = 1) +
+        scale_y_continuous(trans = "reverse")
+      
+      print(gggg)
+      cat("\n\n\n\\pagebreak")
+    }
+  })
+      
+```
+
+
+
+

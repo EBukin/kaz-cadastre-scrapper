@@ -30,7 +30,7 @@ get_response_raw <- function(url) {
 # get_response_raw(cll)
 
 # Function to transform response to a json
-get_response_json <- function(one_call_raw) {
+get_response_json <- function(one_call_raw, simplifyDataFrame = F, simplifyVector = F) {
   
   out <- try({
     one_call_raw %>% 
@@ -41,7 +41,7 @@ get_response_json <- function(one_call_raw) {
       # str_replace_all("\\\\u2116", "") %>% 
       # stringi::stri_trans_general("Kazakh-Latin/BGN") %>%
       # stringi::stri_trans_general("Latin-ASCII") %>%
-      jsonlite::fromJSON(simplifyDataFrame = F, simplifyVector = F)
+      jsonlite::fromJSON(simplifyDataFrame = simplifyDataFrame, simplifyVector = simplifyVector)
   }, silent = T
   )
   
@@ -51,7 +51,7 @@ get_response_json <- function(one_call_raw) {
       one_call_raw %>%
         stringi::stri_trans_general("Latin-ASCII") %>%
         str_replace_all("\\n", "") %>%
-        jsonlite::fromJSON(simplifyDataFrame = F, simplifyVector = F)
+        jsonlite::fromJSON(simplifyDataFrame = simplifyDataFrame, simplifyVector = simplifyVector)
     }, silent = T)
     
   }
