@@ -252,8 +252,8 @@ get_res_ele_geo_attrs <- function(res_ele) {
     st_geometry %>%
     st_as_sf() %>%
     rename(geometry = x) %>%
-    sf::st_set_crs(resp_ele_geo_raw$spatialReference$latestWkid)
-  
+    sf::st_set_crs(resp_ele_geo_raw$spatialReference$latestWkid) %>% 
+    sf::st_make_valid()
   
   
   list(tibble(success_element = TRUE),
