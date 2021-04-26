@@ -1,0 +1,325 @@
+---
+title: "Results of the ugodia-types data scrapping"
+author: "Eduard Bukin"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+editor_options:
+  chunk_output_type: console
+---
+
+
+
+```{r setup, echo = FALSE, warning=FALSE}
+library(pacman)
+pacman::p_load(sf, here, fs, tidyverse, stringi, jsonlite, 
+               httr, RCurl, progress, rgdal, glue, progressr)
+force_reharvest <- FALSE
+knitr::opts_chunk$set(warning=FALSE, message = FALSE, echo = FALSE)
+```
+
+
+```{r}
+ugod_shps <- read_rds(
+  here("data-clean", "10-sarah-request", "kaz-akmol-3-ray-ugodia-types.rds"))
+
+
+ray_shps <- read_rds(
+  here("data-clean", "02-rayon-shapes", "kaz-rayons-shapes_2021-03-31-13-24-01.rds"))
+
+
+leg_json <- read_rds(here("data-raw", "19.2-land-ugodia-legend.rds"))
+dec_base64_img <- function(encoded_img) {
+  tmp_raw_img <- tempfile(fileext = "")
+  inconn <- file(tmp_raw_img, "wb")
+  writeBin(encoded_img, inconn)
+  close(inconn)
+  tmp_png_img <- tempfile(fileext = ".png")
+  inconn <- file(tmp_raw_img, "rb")
+  outconn <- file(tmp_png_img, "wb")
+  base64enc::base64decode(what = inconn, output = outconn)
+  close(inconn)
+  close(outconn)
+  tmp_png_img
+}
+
+
+
+# fill_img <- 
+#   leg_json$layers$legend[[1]]$imageData %>%
+#   sample(1) %>% 
+#   dec_base64_img
+
+
+```
+
+
+```{r  echo = FALSE}
+ugod_dta <- 
+  ugod_shps %>% 
+  st_drop_geometry() %>% 
+  as_tibble()
+
+ray_dta <- 
+  ray_shps %>% 
+  st_drop_geometry() %>% 
+  as_tibble() %>% 
+  filter(raj_rus %in% ugod_dta$raj_rus) %>% 
+  mutate(ray_area_ha = shape_area / 10000) %>% 
+  select(raj_rus, ray_area_ha)
+
+ugod_legend <-
+  leg_json$layers$legend[[1]] %>%
+  bind_rows() %>%
+  filter(label %in% ugod_dta$USL) 
+
+
+ugod_legend <-
+  leg_json$layers$legend[[4]] %>%
+  bind_rows() %>%
+  filter(label %in% ugod_dta$USL, !label %in% ugod_legend$label) %>% 
+  bind_rows()
+
+ugod_sum <- 
+  ugod_dta %>% 
+  select(raj_rus, everything()) %>% 
+  group_by(raj_rus, USL) %>% 
+  summarise(`Ugodia area, HA` = sum(area_ha, na.rm = T)) %>%
+  ungroup() %>%
+  left_join(ray_dta) %>% 
+  mutate(`% share of rayon land` = `Ugodia area, HA` / ray_area_ha * 100) %>% 
+  arrange(raj_rus, desc(`% share of rayon land`)) %>% 
+  ungroup() 
+
+ugod_only_sum <-
+  ugod_sum %>% 
+  group_by(USL) %>% 
+  summarise(ugod_area = sum(`Ugodia area, HA`, na.rm = T),
+            ugod_area_share = ugod_area / sum(ray_dta$ray_area_ha)) %>% 
+  ungroup() %>%
+  mutate( ugod_area_share_chr = ugod_area_share %>%  scales::percent(0.1)) 
+```
+ 
+## Generic data summaries
+
+Data below is present for 3 rayons.
+
+
+### Area of each rayon, where we know the types of ugodia
+
+Remaining area is too complex to harvest.
+
+```{r}
+ugod_sum %>% 
+  group_by(raj_rus, ray_area_ha) %>%
+  summarise(
+    `Known ugodia area, HA` = sum(`Ugodia area, HA`),
+    `% share of rayon land` = sum(`% share of rayon land`)) %>% 
+  ungroup() %>% 
+  select(Rayon = raj_rus,
+         `Rayon area, ha` = ray_area_ha,
+         everything()) %>% 
+  mutate(across(where(is.numeric), ~scales::comma(., 0.01, big.mark = " "))) %>% 
+  knitr::kable(align = "c")
+```
+
+
+
+### Ugodia that take more than 1% of area in rayon. 
+
+`%` next to each rayon name corresponds to the % of all ugodia that is harvested if we filter only those that take more than 1% of rayon. 
+
+```{r fig.width=10, fig.height=5}
+ugod_sum %>%
+  filter(`% share of rayon land` > 1) %>%
+  mutate(USL =
+           USL %>% 
+           # str_sub(USL, 1, 5) %>% 
+           as_factor() %>% 
+           fct_reorder(.x = `% share of rayon land`, .desc = T)
+         ) %>% 
+  group_by(raj_rus) %>% 
+  mutate(area_ray_2 =  sum(`% share of rayon land` / 100)  %>% scales::percent(0.1)) %>% 
+  mutate(raj_rus = str_c(raj_rus, " (", area_ray_2, ")")) %>% 
+  ggplot() + 
+  aes(y = `% share of rayon land`, x = USL, fill = USL) + 
+  geom_bar(stat = "identity") + 
+  facet_wrap(. ~ raj_rus, scales = "free_x") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+
+```{r fig.height=5, fig.width=10}
+space = 4
+# devtools::install_github("clauswilke/ggtextures")
+library(ggtextures)
+
+layer_dta <-
+  ugod_legend %>% 
+  # filter(label %in% pull(filter(ugod_sum, `% share of rayon land` > 1), USL)) %>% 
+  # group_by(layer_name) %>%
+  mutate(values = map_chr(values, ~ {if (is.null(.x)) {""} else {.x}})) %>%
+  mutate(
+    across(
+      c(label, values),
+      ~ stringi::stri_trans_general(., "Cyrillic-Latin/BGN") %>%
+        stringi::stri_trans_general("Latin-ASCII") %>%
+        str_replace_all("[^[:alnum:] ]", "")
+    ),
+    USL = label,
+    label = str_c(label, ". API val: ", values),
+    ing_path = map_chr(imageData, dec_base64_img),
+    ymin = row_number() * space,
+    ymax = ymin + space * 0.9
+  ) %>%
+  ungroup() %>% 
+  left_join(ugod_only_sum, by = "USL") %>% 
+  mutate(label = str_c(USL, " (", ugod_area_share_chr, ")"))
+
+
+
+
+# layer_dta %>%
+#   filter(ugod_area_share > 0.01) %>%
+#   arrange(desc(ugod_area_share)) %>% 
+#   mutate(pages = 1) %>%
+#   # mutate(pages = row_number() %% 2) %>%
+#   group_by(pages) %>%
+#   mutate(ymin = row_number() * space,
+#          ymax = ymin + space * 0.9) %>%
+#   ungroup() %>%
+#   ggplot() +
+#   aes(
+#     xmin = 0,
+#     xmax = space * 2,
+#     ymin = ymin,
+#     ymax = ymax,
+#     x = space * 2 * 1.05,
+#     y = (ymax - ymin) / 2 + ymin,
+#     label = label,
+#     image = ing_path
+#   ) +
+#   geom_textured_rect(img_width = unit(20, "pt"),
+#                      fill = "white",
+#                      colour = "black") +
+#   geom_label(hjust  = "left") +
+#   theme_void() +
+#   expand_limits(x = c(0, space * 4)) +
+#   # facet_wrap(. ~ pages, nrow = 1) +
+#   scale_y_continuous(trans = "reverse")
+```
+
+
+
+### Legend images of all ugodia types that are harvested.
+
+Some legend images are actually identical and are grayed out on the servers of the cadastre. This is a strange behavior, but we will have to guess who is who.
+
+```{r fig.width=16, fig.height=9}
+layer_dta %>%
+  arrange(desc(ugod_area_share)) %>% 
+  # mutate(pages = 1) %>%
+  mutate(pages = row_number() %% 3 + 1) %>%
+  group_by(pages) %>%
+  mutate(ymin = row_number() * space,
+         ymax = ymin + space * 0.9) %>%
+  ungroup() %>%
+  ggplot() +
+  aes(
+    xmin = 0,
+    xmax = space * 2,
+    ymin = ymin,
+    ymax = ymax,
+    x = space * 2 * 1.05,
+    y = (ymax - ymin) / 2 + ymin,
+    label = label,
+    image = ing_path
+  ) +
+  geom_textured_rect(img_width = unit(20, "pt"),
+                     fill = "white",
+                     colour = "black") +
+  geom_label(hjust  = "left") +
+  theme_void() +
+  expand_limits(x = c(0, space * 4)) +
+  facet_wrap(. ~ pages, nrow = 1) +
+  scale_y_continuous(trans = "reverse")
+```
+
+
+### Area of each known ugodia type in each rayon
+
+```{r}
+ugod_sum %>% 
+  select(-ray_area_ha ) %>% 
+  mutate(across(where(is.numeric), ~scales::comma(., 0.01, big.mark = " "))) %>% 
+  knitr::kable(align = "c")
+```
+
+
+
+## Mapping ugodia types
+
+
+```{r  fig.width=16, fig.height=7}
+simple_shapes <- 
+  ugod_shps %>% 
+  # st_simplify(preserveTopology = T)
+  # st_drop_geometry() %>% 
+  left_join(ugod_sum, by = c("USL", "raj_rus")) %>% 
+  filter(`% share of rayon land` > 1) %>% 
+  st_simplify(preserveTopology = T)
+
+
+
+
+simple_shapes$raj_rus %>%
+  unique() %>%
+  walk( ~ {
+    ray_dta <-
+      simple_shapes %>%
+      # st_drop_geometry() %>%
+      filter(str_detect(raj_rus, .x))
+    out_plot <- 
+      ggplot() +
+      aes(fill = USL) +
+      geom_sf(
+        mapping = aes(fill = "Not harvested"),
+        data =
+          filter(ray_shps, raj_rus  %in% ray_dta$raj_rus) %>%
+          mutate(
+            USL = "Not harvested",
+            `% share of rayon land` = 100 - sum(unique(ray_dta$`% share of rayon land`))
+          ) ,
+        inherit.aes = T,
+        fill = "black",
+        colour = "black"
+      ) +
+      geom_sf(
+        data = ray_dta %>%
+          mutate(
+            USL =
+              USL %>%
+              str_c(" (", scales::comma(`% share of rayon land`), "%)") %>%
+              # str_sub(USL, 1, 5) %>%
+              as_factor() %>%
+              fct_reorder(.x = `% share of rayon land`, .desc = T)
+          ) ,
+        colour = NA
+      ) +
+      labs(title = unique(ray_dta$raj_rus),
+           caption = "Not harvested area is in black") +
+      theme_minimal()
+    plot(out_plot)
+  })
+
+
+```
+
+
+
+
+
+
+
+
+
