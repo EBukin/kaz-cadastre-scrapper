@@ -526,6 +526,18 @@ write_rds(
   compress = "gz"
 )
 
+
+write_rds(
+  harvested_poly_clean,
+  here(
+    "data-clean",
+    "10.1-sarah-request-clean",
+    "ugodia-geom.rds"
+  ),
+  compress = "gz"
+)
+
+
 st_write(
   harvested_poly_clean,
   here(
@@ -533,6 +545,18 @@ st_write(
     "10-sarah-request",
     "kaz-akmol-3-ray-ugodia-types-shp",
     "kaz-akmol-3-ray-ugodia-types.shp"
+  ),
+  delete_layer = TRUE
+)
+
+
+st_write(
+  harvested_poly_clean,
+  here(
+    "data-clean",
+    "10.1-sarah-request-clean",
+    "ugodia-geom-shp",
+    "ugodia-geom.shp"
   ),
   delete_layer = TRUE
 )

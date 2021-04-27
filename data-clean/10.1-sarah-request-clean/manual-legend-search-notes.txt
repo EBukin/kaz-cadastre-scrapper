@@ -1,0 +1,40 @@
+We need to find description of the following legends:
+
+~ 71111000 - 	Forests
++ 72110000 - 	Stones (Каменистые поверхности)
++ 71732000 - 	Crop land (пашни)
+~ 71734000 - 	Medows (Сенокос)
++ 71735000 - 	Pasture (Пастбище)
+71736000 - Could be "Камышовые и тростниковые заросли" but I dont think this is a right coding...
+
+After searching in the web and looking at some disertation in the mining sector of Russia (http://mdgigis.pstu.ru/_res/fs/201file.pdf) I came across with this:
+http://infopublic.pravstat.kz:8399/arcgis/rest/services/rtakz29
+
+This is a website or a geoserver of crimes in Kazakshatan. And on the metadatat to some layers of this server, I could find some clues.
+
+Source: http://infopublic.pravstat.kz:8399/arcgis/rest/services/rtakz29/MapServer/61
+Value: 71732000 	Label: пашни
+Value: 71111100 	Label: леса густые высокие (обычные)
+Value: 71111200 	Label: леса густые низкорослые (карликовые)
+Value: 71111100 	Label: леса густые высокие (обычные)
+Value: 71111200 	Label: леса густые низкорослые (карликовые)
+
+
+Source: http://infopublic.pravstat.kz:8399/arcgis/rest/services/rtakz29/MapServer/612
+ID: 71732000 	Name: Пашня
+ID: 72110000 	Name: Каменистые поверхности
+ID: 71734100	Name: Сенокос чистый
+ID: 71735000	Name: Пастбище
+
+Source: https://arcgis.gis-center.kz/server/rest/services/kazakhstan_for_app/MapServer/42
+Value: 71736000		Label: Камышовые и тростниковые заросли
+Value: 71111200 	Label: Леса
+
+Then, I found this:  https://gistoolkit.com/download/classifiers/100t05gmdoc.pdf
+And this: https://gistoolkit.ru/download/doc/mapscreat.pdf
+where it said that 	71730000 	"Сочетание различных видов травянистой растительности"
+
+Here,there is: http://maps1.dvinaland.ru/arcgis/rest/services/Arh_obl/Physical_map/MapServer/27?f=pjson
+"name": "леса",					"code": 71110000
+"name": "леса густые высокие (обычные)",	"code": 71111100
+"name": "леса густые низкорослые",		"code": 71111200

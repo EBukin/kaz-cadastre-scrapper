@@ -68,13 +68,25 @@ plot_export_clean <-
 # Saving data -------------------------------------------------------------
 
 plot_export_clean %>%
-  select(cadastre_id ) %>% 
+  select(cadastre_id ) %>%
   st_write(
     here(
       "data-clean",
       "10.1-sarah-request-clean",
       "plot-geom-shp",
       "plot-geom.shp"
+    ),
+    delete_layer = TRUE
+  )
+
+plot_export_clean %>%
+  select(cadastre_id ) %>% 
+  st_write(
+    here(
+      "data-clean",
+      "10.1-sarah-request-clean",
+      "plot-geom-api-meta-shp",
+      "plot-geom-api-meta.shp"
     ),
     delete_layer = TRUE
   )
@@ -88,6 +100,9 @@ plot_export_clean %>%
     ), 
     compress = "gz"
   )
+
+
+
 
 plot_export_clean %>% 
   select(cadastre_id ) %>% 
@@ -133,7 +148,7 @@ plot_export_clean %>%
       "data-clean",
       "10.1-sarah-request-clean",
       "plot-api-meta.rds"
-    )
+    ), compress = "gz"
   )
 
 
