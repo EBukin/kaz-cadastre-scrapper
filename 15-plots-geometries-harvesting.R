@@ -217,6 +217,28 @@ plots_indx <-
 #   unique() %>% 
 #   map(~file.remove(.x))
 
+# plots_indx[[123]]$response_json[[1]]$results[[10]]$geometry$spatialReference$latestWkid
+# srs_data <-
+#   plots_indx %>%
+#   # `[`(30:35) %>%
+#   map("response_json") %>%
+#   unlist(recursive = FALSE) %>%
+#   map("results") %>%
+#   keep( ~ !is.null(.x)) %>%
+#   unlist(recursive = F) %>%
+#   map("geometry") %>%
+#   map("spatialReference") %>%
+#   map_df( ~ as_tibble(.x))
+# srs_data %>% distinct()
+
+
+# plots_indx %>%
+#   bind_rows() %>%
+#   filter(!response_success ) %>%
+#   pull(path) %>%
+#   unique() %>% 
+#   map(~file.remove(.x))
+
 # plots_indx %>%
 #   bind_rows() %>% 
 #   filter(exceededTransferLimit )

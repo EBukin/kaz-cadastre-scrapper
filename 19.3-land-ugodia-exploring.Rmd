@@ -1,0 +1,236 @@
+---
+title: "Exploring ugodia-types"
+author: "Eduard Bukin"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+editor_options:
+  chunk_output_type: console
+---
+
+
+```{r setup, echo = FALSE, warning=FALSE}
+library(pacman)
+pacman::p_load(sf, here, fs, tidyverse, stringi, jsonlite, 
+               httr, RCurl, progress, rgdal, glue, progressr)
+force_reharvest <- FALSE
+knitr::opts_chunk$set(warning=FALSE, message = FALSE, echo = FALSE)
+```
+
+
+```{r}
+ugod_shps <- read_rds(
+  here("data-clean", "10.1-sarah-request-clean", "ugodia-geom.rds"))
+  st_cast(ugod_shps, "MULTIPOLYGON") %>% 
+  st_make_valid() %>% 
+  select(-area)
+
+ray_shps <- read_rds(
+  here("data-clean", "02-rayon-shapes", "kaz-rayons-shapes_2021-03-31-13-24-01.rds"))
+
+leg_json <- read_rds(here("data-raw", "19.2-land-ugodia-legend.rds"))
+
+dec_base64_img <- function(encoded_img) {
+  tmp_raw_img <- tempfile(fileext = "")
+  inconn <- file(tmp_raw_img, "wb")
+  writeBin(encoded_img, inconn)
+  close(inconn)
+  tmp_png_img <- tempfile(fileext = ".png")
+  inconn <- file(tmp_raw_img, "rb")
+  outconn <- file(tmp_png_img, "wb")
+  base64enc::base64decode(what = inconn, output = outconn)
+  close(inconn)
+  close(outconn)
+  tmp_png_img
+}
+
+
+```
+
+
+```{r  echo = FALSE}
+ugod_dta <- 
+  ugod_shps %>% 
+  st_drop_geometry() %>% 
+  as_tibble()
+
+ray_dta <- 
+  ray_shps %>% 
+  st_drop_geometry() %>% 
+  as_tibble() %>% 
+  filter(raj_rus %in% ugod_dta$raj_rus) %>% 
+  mutate(ray_area_ha = shape_area / 10000) %>% 
+  select(raj_rus, ray_area_ha)
+
+ugod_legend <-
+  leg_json$layers$legend[[1]] %>%
+  bind_rows() %>%
+  filter(label %in% ugod_dta$USL) 
+
+
+ugod_legend <-
+  leg_json$layers$legend[[4]] %>%
+  bind_rows() %>%
+  filter(label %in% ugod_dta$USL, !label %in% ugod_legend$label) %>% 
+  bind_rows()
+
+ugod_sum <- 
+  ugod_dta %>% 
+  select(raj_rus, everything()) %>% 
+  group_by(raj_rus, USL) %>% 
+  summarise(`Ugodia area, HA` = sum(area_ha, na.rm = T)) %>%
+  ungroup() %>%
+  left_join(ray_dta) %>% 
+  mutate(`% share of rayon land` = `Ugodia area, HA` / ray_area_ha * 100) %>% 
+  arrange(raj_rus, desc(`% share of rayon land`)) %>% 
+  ungroup() 
+
+ugod_only_sum <-
+  ugod_sum %>% 
+  group_by(USL) %>% 
+  summarise(ugod_area = sum(`Ugodia area, HA`, na.rm = T),
+            ugod_area_share = ugod_area / sum(ray_dta$ray_area_ha)) %>% 
+  ungroup() %>%
+  mutate( ugod_area_share_chr = ugod_area_share %>%  scales::percent(0.1)) 
+```
+
+
+
+### Area of each rayon, where we know the types of ugodia
+
+Remaining area is too complex to harvest.
+
+```{r}
+ugod_sum %>% 
+  group_by(raj_rus, ray_area_ha) %>%
+  summarise(
+    `Known ugodia area, HA` = sum(`Ugodia area, HA`),
+    `% share of rayon land` = sum(`% share of rayon land`)) %>% 
+  ungroup() %>% 
+  select(Rayon = raj_rus,
+         `Rayon area, ha` = ray_area_ha,
+         everything()) %>% 
+  mutate(across(where(is.numeric), ~scales::comma(., 0.01, big.mark = " "))) %>% 
+  knitr::kable(align = "c")
+```
+
+
+## Exploring Build-up areas by rayon
+
+```{r}
+# ugod_shps_poly <- 
+#   st_cast(ugod_shps, "MULTIPOLYGON") %>% 
+#   select(-area)
+# out_map <- mapview(ugod_shps_poly, alpha.regions = 0.5, zcol = "USL_3", burst = TRUE)
+# mapshot(out_map, url = here("vignettes", "raw_ugodia.html"))
+
+```
+
+
+## Classifying ugodia types
+
+```{r}
+ugod_types <-
+  tribble(
+    ~ USL, ~ ugodia,
+    '71732000', "Cropland",
+    '71734000', "Hayfield",
+    '71735000', "Pasture",
+    '71736000', "Pasture on slopes",
+    '72110000', "Rocky areas",
+    '72120000', "Rocky areas",
+    '71111000', "Forests",
+    '22520000', 'Permanent snow',
+    '22422000', 'Permanent snow',
+    '22160000', 'Permanent snow',
+    '22171000', 'Permanent snow',
+    '22121000', 'Permanent snow',
+    '42100000', 'Buildup area',
+    '41300000', 'Buildup area'
+  )
+
+knitr::kable(ugod_types)
+
+```
+
+```{r}
+ugod_sum %>% 
+  left_join(ugod_types) %>% 
+  group_by(ugodia, ray_area_ha, raj_rus) %>% 
+  summarise(`Ugodia area, HA` = sum(`Ugodia area, HA`)) %>% 
+  group_by(ugodia ) %>% 
+  summarise(`Ugodia area, HA` = sum(`Ugodia area, HA`),
+            `Total area of 3 rayon, ha` = sum(ray_area_ha )) %>% 
+  arrange(desc(`Ugodia area, HA`)) %>% 
+  mutate(`% share of total land in 3 rayon` = 
+           scales::percent(`Ugodia area, HA`  / `Total area of 3 rayon, ha`),
+         `Ugodia area, HA` = scales::comma(`Ugodia area, HA`, big.mark = " "),
+         `Total area of 3 rayon, ha` = scales::comma(`Total area of 3 rayon, ha`, 
+                                                     big.mark = " ")) %>% 
+  mutate(ugodia = ifelse(is.na(ugodia), "Other land types", ugodia)) %>% 
+  knitr::kable(align = "c")
+```
+
+
+
+
+
+## Mapping ugodia types
+
+
+```{r  fig.width=16, fig.height=7}
+simple_shapes <-
+  ugod_shps %>%
+  # st_simplify(preserveTopology = T)
+  # st_drop_geometry() %>%
+  left_join(ugod_sum, by = c("USL", "raj_rus")) %>%
+  # filter(`% share of rayon land` > 1) %>%
+  st_simplify(preserveTopology = T)
+
+# ray_dta  %>% 
+#   st_drop_geometry() %>% 
+#   as_tibble()
+
+simple_shapes$raj_rus %>%
+  unique() %>%
+  walk( ~ {
+    ray_dta <-
+      simple_shapes %>%
+      # st_drop_geometry() %>%
+      filter(str_detect(raj_rus, .x)) %>%
+      mutate(
+        USL =
+          USL %>%
+          str_c(" (", scales::comma(`% share of rayon land`, accuracy = 0.01), "%)") %>%
+          # str_sub(USL, 1, 5) %>%
+          as_factor() 
+      )%>% 
+      mutate(
+        USL = fct_relevel(USL, sort(levels(.$USL)) ))
+    out_plot <- 
+      ggplot() +
+      aes(fill = USL) +
+      geom_sf(
+        data =
+          filter(ray_shps, raj_rus  %in% ray_dta$raj_rus) %>%
+          mutate(
+            USL = "Not harvested",
+            `% share of rayon land` = 100 - sum(unique(ray_dta$`% share of rayon land`))
+          ) ,
+        fill = "black",
+        colour = "black"
+      ) +
+      geom_sf(data = ray_dta , colour = NA) +
+      labs(title = unique(ray_dta$raj_rus),
+           caption = "Not harvested area is in black") +
+      theme_minimal()
+    plot(out_plot)
+  })
+
+
+```
+
+
+
+
+ 

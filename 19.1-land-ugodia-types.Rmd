@@ -21,7 +21,7 @@ knitr::opts_chunk$set(warning=FALSE, message = FALSE, echo = FALSE)
 
 ```{r}
 ugod_shps <- read_rds(
-  here("data-clean", "10-sarah-request", "kaz-akmol-3-ray-ugodia-types.rds"))
+  here("data-clean", "10.1-sarah-request-clean", "ugodia-geom.rds"))
 
 
 ray_shps <- read_rds(
@@ -102,7 +102,7 @@ ugod_only_sum <-
  
 ## Generic data summaries
 
-Data below is present for 3 rayons.
+Data below is presented for 3 rayons.
 
 
 ### Area of each rayon, where we know the types of ugodia
@@ -131,7 +131,7 @@ ugod_sum %>%
 
 ```{r fig.width=10, fig.height=5}
 ugod_sum %>%
-  filter(`% share of rayon land` > 1) %>%
+  filter(`% share of rayon land` > 0.5) %>%
   mutate(USL =
            USL %>% 
            # str_sub(USL, 1, 5) %>% 
@@ -139,7 +139,8 @@ ugod_sum %>%
            fct_reorder(.x = `% share of rayon land`, .desc = T)
          ) %>% 
   group_by(raj_rus) %>% 
-  mutate(area_ray_2 =  sum(`% share of rayon land` / 100)  %>% scales::percent(0.1)) %>% 
+  mutate(area_ray_2 =  sum(`% share of rayon land` / 100)  %>%
+           scales::percent(0.1)) %>% 
   mutate(raj_rus = str_c(raj_rus, " (", area_ray_2, ")")) %>% 
   ggplot() + 
   aes(y = `% share of rayon land`, x = USL, fill = USL) + 
@@ -245,6 +246,48 @@ layer_dta %>%
   scale_y_continuous(trans = "reverse")
 ```
 
+### Aggregates of Ugodias types cherry-picked for 3 rayons:
+
+```{r}
+ugod_types <-
+  tribble(
+    ~ USL, ~ ugodia,
+    '71732000', "Cropland",
+    '71734000', "Hayfield",
+    '71735000', "Pasture",
+    '71736000', "Pasture on slopes",
+    '72110000', "Rocky areas",
+    '72120000', "Rocky areas",
+    '71111000', "Forests",
+    '22520000', 'Permanent snow',
+    '22160000', 'Permanent snow',
+    '42100000', 'Builtup area'
+  )
+
+knitr::kable(ugod_types)
+```
+
+### Area of each aggregated ugodia type in all rayons
+
+```{r}
+ugod_sum %>% 
+  left_join(ugod_types) %>% 
+  group_by(ugodia, ray_area_ha, raj_rus          ) %>% 
+  summarise(`Ugodia area, HA` = sum(`Ugodia area, HA`)) %>% 
+  group_by(ugodia ) %>% 
+  summarise(`Ugodia area, HA` = sum(`Ugodia area, HA`),
+            `Total area of 3 rayon, ha` = sum(ray_area_ha )) %>% 
+  arrange(desc(`Ugodia area, HA`)) %>% 
+  mutate(`% share of total land in 3 rayon` = 
+           scales::percent(`Ugodia area, HA`  / `Total area of 3 rayon, ha`),
+         `Ugodia area, HA` = scales::comma(`Ugodia area, HA`, big.mark = " "),
+         `Total area of 3 rayon, ha` = scales::comma(`Total area of 3 rayon, ha`, 
+                                                     big.mark = " ")) %>% 
+  mutate(ugodia = ifelse(is.na(ugodia), "Other land types", ugodia)) %>% 
+  knitr::kable(align = "c")
+```
+
+
 
 ### Area of each known ugodia type in each rayon
 
@@ -266,7 +309,7 @@ simple_shapes <-
   # st_simplify(preserveTopology = T)
   # st_drop_geometry() %>% 
   left_join(ugod_sum, by = c("USL", "raj_rus")) %>% 
-  filter(`% share of rayon land` > 1) %>% 
+  # filter(`% share of rayon land` > 1) %>% 
   st_simplify(preserveTopology = T)
 
 

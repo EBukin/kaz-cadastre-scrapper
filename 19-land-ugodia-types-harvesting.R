@@ -24,10 +24,10 @@ source("R/find-plots-calls-processors.R")
 # Data =====================================
 
 target_ray <- 
-   here("data-clean",
-        "02-rayon-shapes",
-        "kaz-rayons-shapes_2021-03-31-13-24-01.rds") %>% 
-   read_rds() %>% 
+  here("data-clean",
+       "02-rayon-shapes",
+       "kaz-rayons-shapes_2021-03-31-13-24-01.rds") %>% 
+  read_rds() %>% 
   filter(rayon_id %in% c("323","044","050")) 
 
 
@@ -42,7 +42,7 @@ find_call_generic <-
     "&returnFieldName=false",
     "&returnUnformattedValues=false",
     "&imageDisplay=359,878,96",
-    '&geometry={"x":8679286.03776061,"y":5354094.948797265}',
+    "&geometry={'x':8679286.03776061,'y':5354094.948797265}",
     "&geometryType=esriGeometryPoint",
     "&sr=3857",
     "&mapExtent=8675235.749785392,5344736.823757751,8681098.868265646,5359076.149734529",
@@ -52,7 +52,7 @@ find_call_generic <-
 
 # Try harvesting one: request ==============================================
 
-hsrvest_save_interm_poly <- function(url, folder_for_interm = "~/kaz-cad-raw/land-types/", reduced = TRUE) {
+hsrvest_save_interm_poly <- function(url, interm_fldr = "~/kaz-cad-raw/land-types/", reduced = TRUE) {
   
   one_poly_geo <- 
     get_res_geo_attrs(url) %>%
@@ -88,7 +88,7 @@ hsrvest_save_interm_poly <- function(url, folder_for_interm = "~/kaz-cad-raw/lan
   #     ".rds"
   #   ) 
   # 
-  # write_rds(one_poly_geo, file.path(folder_for_interm, interm_file), compress = "gz")
+  # write_rds(one_poly_geo, file.path(interm_fldr, interm_file), compress = "gz")
   
   # if (!reduced) {
   #   return(one_poly_geo)
@@ -101,7 +101,7 @@ hsrvest_save_interm_poly <- function(url, folder_for_interm = "~/kaz-cad-raw/lan
   # }
 }
 
-folder_for_interm <- "~/kaz-cad-raw/land-types/"
+interm_fldr <- "~/kaz-cad-raw/land-types/"
 
 # one_poly_geo <- get_res_geo_attrs(find_call_generic)
 
@@ -115,7 +115,7 @@ folder_for_interm <- "~/kaz-cad-raw/land-types/"
 #   mutate(file = str_c(kadastrovyj_nomer, "-", usl, ".rds")) %>%
 #   pull(file)
 # 
-# write_rds(one_poly_geo, file.path(folder_for_interm, interm_file), compress = "gz")
+# write_rds(one_poly_geo, file.path(interm_fldr, interm_file), compress = "gz")
 
 # 
 # 
@@ -223,82 +223,89 @@ find_call_str <-
 #   })
 
 
-
-# # Harvesting setup ------------------------------------------------------
+# ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+# ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+# ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+# ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+# # Harvesting Ugodias setup ------------------------------------------------------
+# ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+# ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+# ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 # 
-# folder_for_interm <- "~/kaz-cad-raw/land-types-raw/"
+# interm_fldr <- "~/kaz-cad-raw/land-types-raw/"
 # 
-# target_rayon_to_harvest <-
+# harv_in_geom <-
 #   target_ray %>%
 #   # slice(1) %>%
-#   rmapshaper::ms_simplify(keep = 0.2, keep_shapes = T) %>%
+#   # rmapshaper::ms_simplify(keep = 0.2, keep_shapes = T) %>%
 #   st_set_precision(1) %>%
 #   st_collection_extract("POLYGON") %>%
-#   st_make_valid()
+#   st_make_valid() %>% 
+#   st_buffer(1) %>% 
+#   st_union() 
 # 
+# ggplot(st_geometry(harv_in_geom)) + geom_sf()
 # 
-# # We try using metric CSR
-# # Pulkovo 1942 / CS63 zone K4
+# # # We try using metric CSR
+# # # Pulkovo 1942 / CS63 zone K4
 # 
-# simpify_geom <-
-#   . %>%
-#   st_collection_extract("POLYGON") %>%
-#   st_set_precision(1) %>%
-#   rmapshaper::ms_simplify(keep = 0.2, keep_shapes = T) %>%
-#   st_make_valid()
+# # simpify_geom <-
+# #   . %>%
+# #   st_collection_extract("POLYGON") %>%
+# #   st_set_precision(1) %>%
+# #   # rmapshaper::ms_simplify(keep = 0.2, keep_shapes = T) %>%
+# #   st_make_valid()
 # 
+# # clean_simpify_raw_geom <-
+# #   . %>%
+# #   st_union() %>%
+# #   select(layerId, cad_code_land = value, USL, USL_3, land_poly_id = OBJECTID) %>%
+# #   # group_by(cad_code_land, USL, land_poly_id ) %>%
+# #   # filter(row_number() == 1) %>%
+# #   # ungroup() %>%
+# #   simpify_geom()
 # 
-# clean_simpify_raw_geom <-
-#   . %>%
-#   select(layerId, cad_code_land = value, USL, USL_3, land_poly_id = OBJECTID) %>%
-#   group_by(cad_code_land, USL, land_poly_id ) %>%
-#   filter(row_number() == 1) %>%
-#   ungroup() %>%
-#   simpify_geom()
-# 
-# 
-# harvested_poly <-
-#   list.files(folder_for_interm, full.names = T, pattern = "rds") %>%
-#   # sample(5) %>%
-#   map_dfr( ~ read_rds(.x)) %>%
-#   clean_simpify_raw_geom
-# 
+# # # Already harvested polygons
+# # harvested_poly <-
+# #   list.files(interm_fldr, full.names = T, pattern = "rds") %>%
+# #   map_dfr( ~ read_rds(.x)) %>%
+# #   st_make_valid() %>%
+# #   st_collection_extract("POLYGON") %>%
+# #   st_union() %>%
+# #   # clean_simpify_raw_geom
+# #   st_make_valid()
+# # 
+# # # write_rds(harvested_poly, "./data-temp/harvested-ugodia-raw-union.rds", compress = "gz")
+# harvested_poly <- read_rds("./data-temp/harvested-ugodia-raw-union.rds")
 # 
 # # # Plotting Harvested polygons in rayons
 # # harvested_poly %>%
 # #   ggplot() +
 # #   geom_sf() +
-# #   geom_sf(data = target_rayon_to_harvest, colour = "blue", alpha = 0.2)
-# 
+# #   geom_sf(data = harv_in_geom, colour = "blue", alpha = 0.2)
 # 
 # # Clipping polygons in one rayon of interest
-# harvested_poly_in_ray <-
-#   harvested_poly %>%
-#   st_intersection(st_union(target_rayon_to_harvest))%>%
-#   st_collection_extract("POLYGON") %>%
-#   st_set_precision(1) %>%
-#   st_make_valid()
-# 
-# 
-# # # Plotting Harvested polygons in rayons
-# harvested_poly_in_ray %>%
-#   ggplot() +
-#   geom_sf(aes(fill = USL_3), colour = NA) +
-#   geom_sf(data = target_rayon_to_harvest, colour = "blue", alpha = 0.2)
-# 
-# 
-# # Checking area of this polygon that is harvested
-# sum(st_area(harvested_poly_in_ray)) / sum(st_area(target_rayon_to_harvest))
-# 
+# # harvested_poly_in_ray <-
+# #   harvested_poly %>%
+# #   st_intersection(st_make_valid(st_union(harv_in_geom)))%>%
+# #   st_collection_extract("POLYGON") %>%
+# #   st_make_valid()
+# # 
+# # # Checking area of this polygon that is harvested
+# # sum(st_area(harvested_poly_in_ray)) / sum(st_area(harv_in_geom))
+# # 
+# # # # Plotting Harvested polygons in rayons
+# # harvested_poly_in_ray %>%
+# #   ggplot() +
+# #   geom_sf(aes(fill = USL_3), colour = NA) +
+# #   geom_sf(data = harv_in_geom, colour = "blue", alpha = 0.2)
 # 
 # # # Uniting polygons for clipping them out later
 # # object.size(harvested_poly_in_ray) / 1000000
-# harvested_poly_united_simplified <-
-#   harvested_poly_in_ray %>%
-#   st_union()
-# 
-# 
-# object.size(harvested_poly_united_simplified) / 1000000
+# # harvested_poly_united_simplified <-
+# #   harvested_poly_in_ray %>%
+# #   st_union()
+# # object.size(harvested_poly_united_simplified) / 1000000
 # 
 # 
 # 
@@ -306,26 +313,47 @@ find_call_str <-
 # ## CHANGE HERE TO GET NEW RAYON
 # ## CHANGE slice()
 # area_remained <-
-#   target_rayon_to_harvest %>%
-#   st_union() %>%
-#   st_set_precision(1) %>%
-#   st_make_valid() %>%
-#   st_difference(#
-#     harvested_poly_united_simplified %>%
-#       st_set_precision(1) %>%
-#       st_make_valid())# %>%
-# # st_make_valid()
+#   harv_in_geom %>%
+#   st_difference(harvested_poly) %>% 
+#   st_make_valid()
+# # plot(st_geometry(area_remained))
+# # write_rds(area_remained, "./data-temp/harvested-ugodia-area_remained.rds", compress = "gz")
+# area_remained <- read_rds("./data-temp/harvested-ugodia-area_remained.rds")
+# 
+# area_remained_buffered <-
+#   area_remained %>%
+#   st_buffer(dist = -50) %>% 
+#   st_make_valid()
+# 
+# plot(st_geometry(area_remained_buffered))
+# as.numeric(st_area(area_remained_buffered)) / sum(as.numeric(st_area(target_ray)))
 # 
 # 
-# area_remained %>%
+# 
+# ### CODE BLOEW HAS TO BE REWRITTEN!!!
+# ### ATTENTION
+# ### IT WAS USED TO DO THE HARVESTING
+# ### THIS IS INSUFFICIENT NOW, HOWEVER
+# area_remained_buffered %>%
+#   ggplot() +
+#   geom_sf( fill = "red", alpha = 0.5)
+# 
+# area_remain_polys <-
+#   area_remained_buffered %>%
+#   st_cast("POLYGON") %>%
+#   st_as_sf() %>%
+#   mutate(area = as.numeric(st_area(.))) %>%
+#   arrange(desc(area)) %>%
+#   slice(1:50)
+# 
+# area_remain_polys2 %>%
 #   ggplot() +
 #   geom_sf( fill = "red", alpha = 0.5)
 # 
 # 
 # ## ## ## ## ## ## ##
 # # Regular harvesting approach
-# harvested_poly_in_ray_check <- harvested_poly_in_ray
-# 
+# harvested_poly_in_ray_check <- harvested_poly
 # 
 # 
 # i <- 1
@@ -339,13 +367,13 @@ find_call_str <-
 # while (!is_not_in_harvested) {
 #   cat("new random it\n")
 #   point_spat <-
-#     area_remained %>%
+#     area_remain_polys %>%
 #     st_collection_extract("POLYGON") %>%
 #     st_cast("POLYGON") %>%
 #     st_as_sf() %>%
 #     mutate(area = st_area(.)) %>%
 #     arrange(desc(area)) %>%
-#     slice(1) %>%
+#     slice(1:5) %>%
 #     st_sample(1)
 # 
 #   is_not_in_harvested <- st_intersects(point_spat, harvested_poly_in_ray_check)
@@ -367,27 +395,28 @@ find_call_str <-
 #   hsrvest_save_interm_poly(reduced = T)
 # 
 # 
-# # Siplifying poly -----------------------
+# # Simplifying poly -----------------------
 # 
 # cat("Siplifying polygons\n")
-# new_poly_extract <-
-#   new_poly %>%
-#   clean_simpify_raw_geom %>%
-#   filter(!land_poly_id %in% unique(harvested_poly_in_ray_check$land_poly_id)) 
+# # new_poly_extract <-
+# #   new_poly %>%
+# #   clean_simpify_raw_geom %>%
+# #   filter(!land_poly_id %in% unique(harvested_poly_in_ray_check$land_poly_id))
 # 
-# if (nrow(new_poly_extract) > 0) {
+# if (nrow(new_poly) > 0) {
 #   new_poly_extract <-
-#     new_poly_extract %>% 
-#     st_intersection(area_remained) %>%
-#     simpify_geom
-#   
-#   harvested_poly_in_ray_check <- bind_rows(harvested_poly_in_ray_check, new_poly_extract)
-#   # area_of_remained <- st_area(area_remained)
+#     new_poly %>%
+#     st_intersection(area_remain_polys) #%>%
+#     # simpify_geom
+# 
+#   # harvested_poly_in_ray_check <- bind_rows(harvested_poly_in_ray_check, new_poly_extract)
+#   # area_of_remained <- st_area(area_remain_polys)
 #   # sum(st_area(new_poly_extract)) / area_of_remained
 #   # Cutting poly out of harvested  -----------------------
 #   cat("Area remain calcs \n")
-#   area_remained <-
-#     area_remained %>%
+#   area_remain_polys <-
+#     area_remain_polys %>%
+#     # st_buffer(dist = -500) %>%
 #     st_collection_extract("POLYGON") %>%
 #     st_union() %>%
 #     st_set_precision(1) %>%
@@ -397,8 +426,9 @@ find_call_str <-
 #         st_union() %>%
 #         st_set_precision(1) %>%
 #         st_make_valid())
-#   
+# 
 # }
+# 
 # 
 # i <- i + 1
 # }
@@ -406,118 +436,83 @@ find_call_str <-
 # ## ## ## ## ## ## ## ## ## ## ## ## ## ##
 # ## End of the harvesting loop -
 # 
-# # area_remained %>%
-# #   ggplot() +
-# #   geom_sf( fill = "red") +
-# #   geom_sf( data = new_poly_extract, fill = "green", alpha = 0.2)
+# area_remain_polys %>%
+#   # st_buffer(dist = -500) %>%
+#   ggplot() +
+#   geom_sf( fill = "red") +
+#   geom_sf( data = new_poly_extract, fill = "green", alpha = 0.2)
 
 
 
-# Cleaning resaving harvested geometries -------------------------------------
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+## Cleaning re-saving harvested geometries -------------------------------------
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 
 
-# folder_for_interm <- "~/kaz-cad-raw/land-types-raw/"
-# 
-# target_rayon_to_harvest <-
-#   target_ray %>%
-#   rmapshaper::ms_simplify(keep = 0.2, keep_shapes = T) %>%
-#   st_set_precision(1) %>%
-#   st_collection_extract("POLYGON") %>%
-#   st_make_valid()
-# 
-# 
-# # We try using metric CSR
-# # Pulkovo 1942 / CS63 zone K4
-# simpify_geom <-
-#   . %>%
-#   st_collection_extract("POLYGON") %>%
-#   st_set_precision(1) %>%
-#   rmapshaper::ms_simplify(keep = 0.2, keep_shapes = T) %>%
-#   st_make_valid()
-# 
-# 
-# 
-# # Exportign RAW data  -----------------------------------------------------
-# 
-# 
-# 
-# harvested_poly_raw <-
-#   list.files(folder_for_interm, full.names = T, pattern = "rds") %>%
-#   # sample(5) %>%
-#   map_dfr( ~ read_rds(.x)) %>% 
-#   filter((success_element)) %>%
-#   select(layerId, cad_code_land = value, USL, USL_3, land_poly_id = OBJECTID) %>%
-#   group_by(cad_code_land, USL, land_poly_id ) %>%
-#   filter(row_number() == 1) %>%
-#   ungroup() %>%
-#   st_collection_extract("POLYGON") %>% 
-#   st_set_precision(1) %>% 
-#   st_make_valid()
-# 
-# harvested_poly_raw %>% 
-#   write_rds(here("data-raw", "19.1-land-ugodia-raw-geometries.rds"),
-#             compress = "gz")
-# 
-# 
-# 
-# harvested_poly_raw <-
-#   here("data-raw", "19.1-land-ugodia-raw-geometries.rds") %>% 
-#   read_rds()
-# 
-# 
-# clipped_poly <-
-#   target_ray %>%
-#   select(obl_id , rayon_id, name, obl_rus, raj_rus) %>%
-#   group_by(row_number()) %>%
-#   nest() %>%
-#   pmap( ~ {
-#     harvested_poly_raw %>%
-#       st_set_precision(1) %>%
-#       st_intersection(st_union(.y) %>%
-#                         st_set_precision(1) %>%
-#                         st_make_valid()) %>%
-#       st_collection_extract("POLYGON") %>%
-#       st_make_valid() %>%
-#       bind_cols(.y %>% st_drop_geometry())
-#   })
-# 
-# 
-# harvested_poly_clean  <-
-#   clipped_poly %>%
-#   bind_rows() %>%
-#   # st_drop_geometry() %>%
-#   # as_tibble() %>%
-#   group_by(USL, USL_3, land_poly_id, obl_id, rayon_id, raj_rus, obl_rus) %>%
-#   summarise(n = n()) %>%
-#   ungroup() %>%
-#   mutate(area_ha = as.numeric(st_area(.)) / 10000) %>%
-#   arrange(raj_rus, desc(area_ha))
-# 
-# harvested_poly_clean %>%
-#   write_rds(
-#     here(
-#       "data-clean",
-#       "07-land-ugodia-types",
-#       "kaz-ugodia-geometries.rds"
-#     ),
-#     compress = "gz"
-#   )
+# interm_fldr <- "~/kaz-cad-raw/land-types-raw/"
+ugod_raw  <-
+  list.files(interm_fldr, full.names = T, pattern = "rds") %>%
+  map_dfr( ~ read_rds(.x)) %>%
+  mutate(area = as.numeric(st_area(.))) %>%
+  select(USL, USL_3, land_poly_id, OBJECTID, area) %>%
+  mutate(land_poly_id  = ifelse(is.na(land_poly_id), OBJECTID, land_poly_id)) %>%
+  group_by(USL, USL_3, land_poly_id) %>%
+  filter(row_number() == 1) %>% 
+  ungroup() %>% 
+  select(-OBJECTID) %>%
+  st_make_valid()
+
+sum(as.numeric(st_area(ugod_raw))) / sum(as.numeric(st_area(target_ray)))
 
 
-# Saving all --------------------------------------------------------------
+# Clipping ugoia in the regions ==============================================
 
-harvested_poly_clean <-
+ugod_poly_clean <-
+  ugod_raw %>%
+  st_intersection(
+    target_ray %>%
+      select(obl_id, rayon_id, name, obl_rus, raj_rus) %>% 
+      st_make_valid()) %>%
+  st_make_valid() %>% 
+  mutate(area_ha = as.numeric(st_area(.)) / 10000) %>%
+  arrange(raj_rus, desc(area_ha)) %>% 
+  st_cast("MULTIPOLYGON")
+
+ggplot() + 
+  aes(fill = raj_rus) + 
+  geom_sf(data = target_ray, inherit.aes = FALSE, fill = "black") +
+  geom_sf(data = ugod_poly_clean, color = NA) 
+
+
+ugod_poly_clean %>%
+  write_rds(
     here(
       "data-clean",
       "07-land-ugodia-types",
       "kaz-ugodia-geometries.rds"
-    ) %>% 
-  read_rds()
+    ),
+    compress = "gz"
+  )
 
+# Saving all --------------------------------------------------------------
 
+# ugod_poly_clean <-
+#   here(
+#     "data-clean",
+#     "07-land-ugodia-types",
+#     "kaz-ugodia-geometries.rds"
+#   ) %>% 
+#   read_rds()
 
 write_rds(
-  harvested_poly_clean,
+  ugod_poly_clean,
   here(
     "data-clean",
     "10-sarah-request",
@@ -526,9 +521,8 @@ write_rds(
   compress = "gz"
 )
 
-
 write_rds(
-  harvested_poly_clean,
+  ugod_poly_clean,
   here(
     "data-clean",
     "10.1-sarah-request-clean",
@@ -539,7 +533,7 @@ write_rds(
 
 
 st_write(
-  harvested_poly_clean,
+  ugod_poly_clean,
   here(
     "data-clean",
     "10-sarah-request",
@@ -551,7 +545,7 @@ st_write(
 
 
 st_write(
-  harvested_poly_clean,
+  ugod_poly_clean,
   here(
     "data-clean",
     "10.1-sarah-request-clean",
@@ -565,7 +559,7 @@ st_write(
 # Plotting some aspects ---------------------------------------------------
 
 
-clipped_poly_clean %>% 
+ugod_poly_clean %>% 
   mutate(area_ha = as.numeric(st_area(.)) / 10000) %>% 
   st_drop_geometry() %>%
   as_tibble() %>%
@@ -576,8 +570,7 @@ clipped_poly_clean %>%
   ggplot() +
   aes(x = USL_3, y = area_ha, fill = USL_3 ) +
   geom_col() + 
-  facet_wrap(. ~ raj_rus, scales = "free_x") + 
-  scale_x_continuous(labels = scales::comma)
+  facet_wrap(. ~ raj_rus, scales = "free_x") 
 
 
 
