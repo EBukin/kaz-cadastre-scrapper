@@ -16,7 +16,8 @@ parallel_harvest_one_extra_dig <- function(lines_to_harvest, interm_folder, geom
   
   # Non parallel harvest
   lines_to_harvest %>%
-    future_pwalk(~ {
+    pwalk(~ {
+      # browser()
       one_line <- rlang::dots_list(...) %>% as_tibble()
       line_file <- here(interm_folder, one_line$file_to)
       line_geometries <-
@@ -58,7 +59,7 @@ handlers(list(
   )
 ))
 
-plan(multisession)
+# plan(multisession)
 
 
 find_plots_call_generic <-
@@ -68,7 +69,7 @@ find_plots_call_generic <-
 
 # Detecting first digit of a plot ===================================
 
-interm_one_folder <- "~/kaz-cad-raw/plot-1-dig/"
+interm_one_folder <- "~/kaz-cad-raw/2021-07-19-plots-harvesting/plot-1-dig/"
 
 kvartals_digits_clean <-
   read_rds("data-clean/04-kvartal-indexes/obl-03.rds") %>% 
@@ -87,11 +88,11 @@ if (nrow(kvartals_digits_clean) > 0) {
 
 # Two-digit + third harvesting  ========================================
 
-interm_two_folder <- "~/kaz-cad-raw/plot-2-dig/"
+interm_two_folder <- "~/kaz-cad-raw/2021-07-19-plots-harvesting/plot-2-dig/"
 harvested <- list.files(here(interm_two_folder))
 
 plot_one_level_digits_clean <-
-  list.files("~/kaz-cad-raw/plot-1-dig/", full.names = T) %>%
+  list.files("~/kaz-cad-raw/2021-07-19-plots-harvesting/plot-1-dig/", full.names = T) %>%
   map_dfr(read_rds) %>% 
   mutate(base_digit = str_c(base_digit, new_digit)) %>% 
   filter(response_n_elements > 0, exceededTransferLimit ) %>% 
@@ -113,11 +114,11 @@ if (nrow(plot_one_level_digits_clean) > 0) {
 
 # three-digit + four harvesting  ========================================
 
-interm_three_folder <- "~/kaz-cad-raw/plot-3-dig/"
+interm_three_folder <- "~/kaz-cad-raw/2021-07-19-plots-harvesting/plot-3-dig/"
 harvested <- list.files(here(interm_three_folder))
 
 plot_two_level_digits_clean <-
-  list.files("~/kaz-cad-raw/plot-2-dig/", full.names = T) %>%
+  list.files("~/kaz-cad-raw/2021-07-19-plots-harvesting/plot-2-dig/", full.names = T) %>%
   map_dfr(read_rds) %>% 
   mutate(base_digit = str_c(base_digit, new_digit)) %>% 
   filter(response_n_elements > 0, exceededTransferLimit) %>%
@@ -137,11 +138,11 @@ if (nrow(plot_two_level_digits_clean) > 0) {
 
 # four-digit + five harvesting  ========================================
 # 
-interm_four_folder <- "~/kaz-cad-raw/plot-4-dig/"
+interm_four_folder <- "~/kaz-cad-raw/2021-07-19-plots-harvesting/plot-4-dig/"
 harvested <- list.files(here(interm_four_folder))
 
 plot_three_level_digits_clean <-
-  list.files("~/kaz-cad-raw/plot-3-dig/", full.names = T) %>%
+  list.files("~/kaz-cad-raw/2021-07-19-plots-harvesting/plot-3-dig/", full.names = T) %>%
   map_dfr(read_rds) %>%
   mutate(base_digit = str_c(base_digit, new_digit)) %>%
   filter(response_n_elements > 0, exceededTransferLimit) %>%
@@ -243,11 +244,19 @@ plots_indx <-
 #   bind_rows() %>% 
 #   filter(exceededTransferLimit )
 
+"~/kaz-cad-raw/plot-4-dig/50_03_044_023104x.rds" %>% 
+  read_rds() %>% 
+  pull(response_geo_attrs )
+
+
+"~/kaz-cad-raw/2021-07-19-plots-harvesting/plot-4-dig/50_03_044_023104x.rds" %>% 
+  read_rds() %>% 
+  pull(response_geo_attrs )
 
 extended_index <-
   plots_indx %>%
   map_dfr( ~ .x %>% pull(response_geo_attrs)) %>%
-  filter(!empty) %>%
+  # filter(!empty) %>%
   dplyr::filter(!is.na(KAD_NOMER)) %>% 
   group_by(KAD_NOMER) %>% 
   mutate(n = row_number()) %>% 
@@ -258,20 +267,21 @@ extended_index <-
     rayon_id = str_sub(layerName, 6, 8),
     actual_rayon_id = str_sub(KAD_NOMER, 3, 5),
     kvartal_id = str_sub(KAD_NOMER, 6, 8),
-    NAZV = NAZV %>% translit_kaz,
-    CATEGORY_RUS = CATEGORY_RUS %>% translit_rus,
-    CATEGORY_KAZ  = CATEGORY_KAZ  %>% translit_kaz ,
-    PRAVO_RUS   = PRAVO_RUS   %>% translit_rus ,
-    PRAVO_KAZ   = PRAVO_KAZ   %>% translit_kaz ,
-    TSN_RUS    = TSN_RUS    %>% translit_rus ,
-    TSN_KAZ    = TSN_KAZ    %>% translit_kaz ,
+    # NAZV = NAZV %>% translit_kaz,
+    # CATEGORY_RUS = CATEGORY_RUS %>% translit_rus,
+    # CATEGORY_KAZ  = CATEGORY_KAZ  %>% translit_kaz ,
+    # PRAVO_RUS   = PRAVO_RUS   %>% translit_rus ,
+    # PRAVO_KAZ   = PRAVO_KAZ   %>% translit_kaz ,
+    # TSN_RUS    = TSN_RUS    %>% translit_rus ,
+    # TSN_KAZ    = TSN_KAZ    %>% translit_kaz ,
     Shape_Area = str_replace_all(Shape_Area, ",", "\\.") %>% as.numeric()
     ) %>% 
   select(
     cadastre_id = KAD_NOMER, 
     layerId, obl_id, rayon_id, actual_rayon_id, kvartal_id, 
-    CATEGORY_RUS, CATEGORY_KAZ, PRAVO_RUS, PRAVO_KAZ, TSN_RUS, TSN_KAZ, NAZV,
-    Shape_Area, Shape_Length)
+    #CATEGORY_RUS, CATEGORY_KAZ, PRAVO_RUS, PRAVO_KAZ, TSN_RUS, TSN_KAZ, #NAZV,
+    Shape_Area, Shape_Length) %>% 
+  st_as_sf()
 
 
 
@@ -282,7 +292,7 @@ extended_index %>%
     here(
       "data-clean",
       "05-plots-shapes",
-      "kaz-all-plots-shapes-clean.rds"
+      "kaz-all-plots-shapes-clean-2021-07-20.rds"
     ),
     compress = "gz"
   )
@@ -298,7 +308,7 @@ sarah_export %>%
     here(
       "data-clean",
       "10-sarah-request",
-      "kaz-akmol-3-ray-clean.rds"
+      "kaz-akmol-3-ray-clean-2021-07-20.rds"
     ),
     compress = "gz"
   )
@@ -310,8 +320,8 @@ sarah_export %>%
     here(
       "data-clean",
       "10-sarah-request",
-      "kaz-akmol-3-ray-clean-shp",
-      "kaz-akmol-3-ray-clean.shp"
+      "kaz-akmol-3-ray-clean-shp-2021-07-20",
+      "kaz-akmol-3-ray-clean-2021-07-20.shp"
     ), 
     delete_layer = TRUE
   )
@@ -324,7 +334,7 @@ sarah_export %>%
     here(
       "data-clean",
       "10-sarah-request",
-      "kaz-akmol-3-ray-1ha-clean.rds"
+      "kaz-akmol-3-ray-1ha-clean-2021-07-20.rds"
     ),
     compress = "gz"
   )
@@ -337,8 +347,8 @@ sarah_export %>%
     here(
       "data-clean",
       "10-sarah-request",
-      "kaz-akmol-3-ray-1ha-clean-shp",
-      "kaz-akmol-3-ray-1ha-clean.shp"
+      "kaz-akmol-3-ray-1ha-clean-shp-2021-07-20",
+      "kaz-akmol-3-ray-1ha-clean-2021-07-20.shp"
     ),
     delete_layer = TRUE
   )
@@ -365,6 +375,11 @@ area_missed_second <-
 
 area_missed_second
 
+
+sarah_export %>% 
+  st_as_sf() %>% 
+  st_geometry() %>% 
+  st_area() %>% as.numeric() %>% sum()
 
 sum(area_missed_second$Shape_Area) / 1000000
 
