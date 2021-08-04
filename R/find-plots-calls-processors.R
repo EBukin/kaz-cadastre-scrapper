@@ -301,7 +301,7 @@ get_res_ele_geo_attrs <- function(res_ele) {
 
 # Function for extracting everythiong from one response
 get_res_geo_attrs <- function(url) {
-  
+  # browser()
   response_raw <- 
     url %>% 
     get_response_raw

@@ -134,11 +134,16 @@ ugod_types <-
   tribble(
     ~ USL, ~ ugodia,
     '71732000', "Cropland",
+    '71723000', "Cropland", 
+    '71722000', "Cropland",
+    '71162000', "Cropland",
+    '71721000', 'Marginal cropland',
     '71734000', "Hayfield",
     '71735000', "Pasture",
     '71736000', "Pasture on slopes",
     '72110000', "Rocky areas",
     '72120000', "Rocky areas",
+    '72600000', "Rocky areas",
     '71111000', "Forests",
     '22520000', 'Permanent snow',
     '22422000', 'Permanent snow',
@@ -146,12 +151,32 @@ ugod_types <-
     '22171000', 'Permanent snow',
     '22121000', 'Permanent snow',
     '42100000', 'Buildup area',
-    '41300000', 'Buildup area'
+    '41300000', 'Buildup area',
+    '71727000', 'Buildup area'
   )
 
 knitr::kable(ugod_types)
 
 ```
+
+## Exploring classified areas by rayon
+
+```{r}
+# ugod_shps_poly <-
+#   st_cast(ugod_shps, "MULTIPOLYGON") %>%
+#   select(-area) %>% 
+#   left_join(ugod_types) %>%
+#   mutate(ugodia = ifelse(is.na(ugodia), "Others", ugodia)) %>% 
+#   group_by(ugodia) %>% 
+#   summarise(area_ha = sum(area_ha, na.rm = T)) %>% 
+#   ungroup()
+# library(mapview)
+# out_map <- mapview(ugod_shps_poly, alpha.regions = 0.5, zcol = "ugodia", burst = TRUE)
+# # mapshot(out_map, url = here("vignettes", "raw_ugodia.html"))
+
+```
+
+
 
 ```{r}
 ugod_sum %>% 

@@ -27,16 +27,18 @@ get_plot_mtdt_raw <- function(id) {
 
 # Getting kadastre numbers index -------------------------------------
 
-  existing_plots <- read_rds(here("data-clean", 
-                                "05-plots-shapes",
-                                "kaz-all-plots-shapes-clean.rds")) %>% 
-  st_drop_geometry() %>% 
+existing_plots <- read_rds(here(
+  "data-clean",
+  "05-plots-shapes",
+  "kaz-all-plots-shapes-clean-2021-07-20.rds"
+)) %>%
+  st_drop_geometry() %>%
   distinct(cadastre_id)
 
 
 # Metadata harvester ===================================================
 
-to_fold <- "~/kaz-cad-raw/plot-metadata/"
+to_fold <- "~/kaz-cad-raw/2021-07-19-plots-harvesting/plot-metadata/"
 
 
 parallel_metadata_harvest <- 
@@ -60,18 +62,18 @@ parallel_metadata_harvest <-
 # Actual harvesting ====================================================
 
 
-harvested <- 
-  list.files(to_fold, full.names = T) %>% 
-  map_dfr(read_rds) %>% 
-  mutate(raw_mtdt_responce = unlist(raw_mtdt_responce, recursive = F)) %>% 
-  filter(raw_mtdt_responce != "failed") %>% 
-  group_by(cadastre_id) %>% 
-  filter(harv_time == max(harv_time)) %>% 
-  arrange(desc(harv_time)) %>% 
+harvested <-
+  list.files(to_fold, full.names = T) %>%
+  map_dfr(read_rds) %>%
+  mutate(raw_mtdt_responce = unlist(raw_mtdt_responce, recursive = F)) %>%
+  filter(raw_mtdt_responce != "failed") %>%
+  group_by(cadastre_id) %>%
+  filter(harv_time == max(harv_time)) %>%
+  arrange(desc(harv_time)) %>%
   mutate(n = row_number()) %>%
-  ungroup() %>% 
+  ungroup() %>%
   filter(n == 1)
-  
+
 
 
 library(progressr)
@@ -86,24 +88,24 @@ handlers(list(
   )
 ))
 
-plan(multisession, workers = 7)
+# plan(multisession, workers = 7)
 
 # one_plot <- existing_plots %>%
 #   sample(1)
 
 extra_metadata <-
   existing_plots %>%
-  filter(!cadastre_id %in% harvested$cadastre_id) %>% 
+  filter(!cadastre_id %in% harvested$cadastre_id) %>%
   group_by(row_number() %% 1) %>%
-  nest() %>% 
-  # pull(data) %>% 
+  nest() %>%
+  # pull(data) %>%
   pmap(~{
     # browser()
     cat("step: ", .x, "\n")
-    interm_harvest <- 
-      .y %>% 
+    interm_harvest <-
+      .y %>%
       parallel_metadata_harvest
-    
+
     write_rds(
       interm_harvest,
       str_c(to_fold, "metadata-part-", str_replace_all(Sys.time(), "[^[:alnum:]]", "-"), ".rds"),
@@ -134,9 +136,19 @@ extra_metadata <-
 #   filter(n == 1)
 # 
 # 
-# write_rds(harvested_raw, here("data-raw", "18-plot-metadata-all.rds"), compress = "gz")
-
-harvested_raw <- read_rds( here("data-raw", "18-plot-metadata-all.rds"))
+# write_rds(harvested_raw, here("data-raw", "18-plot-metadata-all-2021-07-20.rds"), compress = "gz")
+harvested_raw <- read_rds( here("data-raw", "18-plot-metadata-all-2021-07-20.rds"))
+# harvested_raw2 <- 
+#   "~/kaz-cad-raw/2021-07-19-plots-harvesting/plot-metadata/metadata-part-2021-07-21-15-17-34.rds" %>% 
+#     map_dfr(read_rds) %>%
+#     mutate(raw_mtdt_responce = unlist(raw_mtdt_responce, recursive = F)) %>%
+#     filter(raw_mtdt_responce != "failed") %>%
+#     group_by(cadastre_id) %>%
+#     filter(harv_time == max(harv_time)) %>%
+#     arrange(desc(harv_time)) %>%
+#     mutate(n = row_number()) %>%
+#     ungroup() %>%
+#     filter(n == 1)
 
 # Parcing metadata --------------------------------------------------------
 
@@ -207,40 +219,48 @@ handlers(list(
   handler_progress(
     format   = ":spin :current/:total [:bar] :percent in :elapsed ETA: :eta",
     width    = 80,
-    complete = "+"#,
-    # interval = 10
+    complete = "+"
   )
 ))
 
 
 # # Uncomment to start parcing
 # parced_metadata <-
-#   harvested_raw %>% 
+#   harvested_raw %>%
 #   parallel_parcing
 # parced_metadata %>%
-#   write_rds(here("data-raw","18.2-plots-metadata-parced-raw.rds"), compress = "gz")
+#   write_rds(here("data-raw","18.2-plots-metadata-parced-raw-2021-07-20.rds"), compress = "gz")
+
+# parced_metadata2 <-
+#   harvested_raw2 %>%
+#   parallel_parcing
+# parced_metadata2 %>%
+#   write_rds(here("data-raw","18.2-plots-metadata-parced-raw2-2021-07-20.rds"), compress = "gz")
+
 
 # Cleaning parced metadata ---------------------------------------
 
 parced_metadata_raw <- 
-  read_rds(here("data-raw","18.2-plots-metadata-parced-raw.rds"))
+  read_rds(here("data-raw","18.2-plots-metadata-parced-raw-2021-07-20.rds")) %>% 
+  bind_rows(read_rds(here("data-raw","18.2-plots-metadata-parced-raw2-2021-07-20.rds")))
 
 
-parced_metadata_clean <- 
-  parced_metadata %>% 
+parced_metadata_clean <-
+  parced_metadata_raw %>% 
+  select(-raw_mtdt_responce) %>% 
   unnest(meatadata) %>%
-  unnest(meatadata) %>% 
+  unnest(meatadata) %>% #glimpse()
   mutate(var = var %>%
            translit_rus_text %>%
            str_replace_all("[^[:alnum:] ]", "") %>%
            str_replace_all(" ", "_") %>%
            str_to_lower() ) %>% 
   pivot_wider(names_from = var, 
-              values_from = c(kaz, rus)) %>% 
-  select(cadastre_id, kadastrovyj_nomer , 
+              values_from = c(kaz, rus)) %>% #names()
+  select(cadastre_id, success,# kadastrovyj_nomer , 
          contains("rus_"), contains("kaz_"), 
          -rus_kadastrovyj_nomer, -matches("_NA", ignore.case = F)) %>% 
-  filter(success ) 
+  filter(success )
 
 
 # parced_metadata_clean <-
@@ -273,10 +293,10 @@ parced_metadata_clean %>% count(rus_ogranicenia, sort = T)
 
 
 parced_metadata_clean %>%
-  write_csv(here("data-clean","06-plots-metadata-clean.csv"))
+  write_csv(here("data-clean","06-plots-metadata-clean-2021-07-20.csv"))
 
 parced_metadata_clean %>%
-  write_rds(here("data-clean","06-plots-metadata-clean.rds"), compress = "gz")
+  write_rds(here("data-clean","06-plots-metadata-clean-2021-07-20.rds"), compress = "gz")
 
 
 

@@ -9,6 +9,27 @@ force_reharvest <- FALSE
 source("R/find-plots-calls-processors.R")
 
 # Function =============================================
+get_one_line <- 
+  function(one_line, geometry_call) {
+    # one_line <- rlang::dots_list(...) %>% as_tibble()
+    # line_file <- here(interm_folder, one_line$file_to)
+    line_geometries <-
+      0:9 %>%
+      map_dfr(~ {
+        one_line_base <- 
+          one_line %>%
+          mutate(new_digit = .x) %>%
+          mutate(url = glue(geometry_call)) 
+        
+        one_line_base %>% 
+          bind_cols(
+            one_line_base %>% 
+              pull(url) %>%
+              get_res_geo_attrs
+          )
+      })
+    line_geometries
+  }
 
 parallel_harvest_one_extra_dig <- function(lines_to_harvest, interm_folder, geometry_call) {
   
@@ -20,21 +41,7 @@ parallel_harvest_one_extra_dig <- function(lines_to_harvest, interm_folder, geom
       # browser()
       one_line <- rlang::dots_list(...) %>% as_tibble()
       line_file <- here(interm_folder, one_line$file_to)
-      line_geometries <-
-        0:9 %>%
-        map_dfr(~ {
-          one_line_base <- 
-            one_line %>%
-            mutate(new_digit = .x) %>%
-            mutate(url = glue(geometry_call)) 
-          
-          one_line_base %>% 
-            bind_cols(
-              one_line_base %>% 
-              pull(url) %>%
-                get_res_geo_attrs
-            )
-        })
+      line_geometries <- get_one_line(one_line, geometry_call)
       
       p()
       
@@ -73,8 +80,12 @@ interm_one_folder <- "~/kaz-cad-raw/2021-07-19-plots-harvesting/plot-1-dig/"
 
 kvartals_digits_clean <-
   read_rds("data-clean/04-kvartal-indexes/obl-03.rds") %>% 
-  mutate(rayon_id = actual_ray_id,
-         base_digit = actual_kvartal_id) %>% 
+  bind_rows(
+    .,
+    mutate(., rayon_id = actual_ray_id)
+  ) %>% 
+  distinct() %>% 
+  mutate(base_digit = actual_kvartal_id) %>% 
   select(leyer_id, obl_id, rayon_id, base_digit) %>% 
   mutate(file_to = glue("{leyer_id}_{obl_id}_{rayon_id}_{base_digit}x.rds")) %>% 
   filter(!file_to %in% list.files(interm_one_folder))
@@ -258,10 +269,16 @@ extended_index <-
   map_dfr( ~ .x %>% pull(response_geo_attrs)) %>%
   # filter(!empty) %>%
   dplyr::filter(!is.na(KAD_NOMER)) %>% 
-  group_by(KAD_NOMER) %>% 
-  mutate(n = row_number()) %>% 
-  filter(n == 1) %>% 
+  st_make_valid() %>% 
+  # filter(str_detect(KAD_NOMER, "0305008100")) %>%
+  group_by(KAD_NOMER, layerName, layerId) %>% 
+  mutate(n = row_number()) %>%
+  st_make_valid() %>% 
+  summarise() %>% 
   ungroup() %>% 
+  mutate(Shape_Area = as.numeric(st_area(.))) %>% 
+  # filter(n == 
+  # ungroup() %>% 
   mutate(
     obl_id = str_sub(layerName, 3, 4),
     rayon_id = str_sub(layerName, 6, 8),
@@ -280,7 +297,7 @@ extended_index <-
     cadastre_id = KAD_NOMER, 
     layerId, obl_id, rayon_id, actual_rayon_id, kvartal_id, 
     #CATEGORY_RUS, CATEGORY_KAZ, PRAVO_RUS, PRAVO_KAZ, TSN_RUS, TSN_KAZ, #NAZV,
-    Shape_Area, Shape_Length) %>% 
+    Shape_Area) %>% 
   st_as_sf()
 
 
@@ -298,9 +315,10 @@ extended_index %>%
   )
 #
 sarah_export <-
-  tibble(obl_id = "03",
-         rayon_id = c("323", "044", '050')) %>%
-  inner_join(extended_index)
+  extended_index
+  # tibble(obl_id = "03",
+  #        rayon_id = c("323", "044", '050')) %>%
+  # inner_join(extended_index)
 
 
 sarah_export %>%
@@ -359,21 +377,50 @@ sarah_export %>%
 ## Checking what was not harvested compare to the previous attempt =======
 
 old_harvest <-
-  read_rds("data-clean/05-SR-request/plots-geometry-3-rayons.rds") %>% 
-  select(KAD_NOMER, Shape_Area)
+  read_rds("data-clean/05-plots-shapes/kaz-all-plots-shapes-clean.rds") %>% 
+  select(cadastre_id) %>% 
+  mutate(area = as.numeric(st_area(.)))
 
+new_harvest <-
+  read_rds("data-clean/05-plots-shapes/kaz-all-plots-shapes-clean-2021-07-20.rds") %>% 
+  select(cadastre_id) %>% 
+  mutate(area = as.numeric(st_area(.)))
+
+
+merged_dta <- 
+  new_harvest %>% 
+  left_join(old_harvest %>% st_drop_geometry()) %>% 
+  mutate(new = if_else(
+    abs(Shape_Area - area) > 0.1, 
+    "Changed size", "Old poly", "New poly"))
+
+
+merged_dta %>% 
+  st_drop_geometry() %>% 
+  group_by(new) %>% 
+  summarise(Shape_Area = sum(Shape_Area))
+
+merged_dta %>% 
+  mapview::mapview(zcol = 'new')
 
 area_missed_second <- 
   old_harvest %>% 
   st_drop_geometry() %>% 
   as_tibble() %>% 
-  select(cadastre_id = KAD_NOMER, Shape_Area) %>% 
+  # select(cadastre_id = KAD_NOMER, Shape_Area) %>% 
   anti_join(
     extended_index %>% 
       select(cadastre_id )
   ) 
 
 area_missed_second
+
+
+old_harvest %>% 
+  st_as_sf() %>% 
+  st_geometry() %>% 
+  st_area() %>% as.numeric() %>% sum()
+
 
 
 sarah_export %>% 

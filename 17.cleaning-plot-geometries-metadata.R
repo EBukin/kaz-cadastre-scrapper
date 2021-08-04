@@ -25,7 +25,7 @@ ray_geoms <-
 plot_geoms <-
   here("data-clean",
        "05-plots-shapes",
-       "kaz-all-plots-shapes-clean.rds") %>%
+       "kaz-all-plots-shapes-clean-2021-07-20.rds") %>%
   read_rds() %>%
   inner_join(tibble(obl_id = "03", rayon_id = c("323", "044", '050')))
 
@@ -38,27 +38,27 @@ plot_metadata <-
 
 plot_export_clean <-
   plot_geoms %>%
-  mutate(area_ha = Shape_Area / 10000) %>% 
+  mutate(area_ha = as.numeric(st_area(.)) / 10000) %>% 
   select(cadastre_id,
          leyer_id = layerId,
          obl_id,
          rayon_id,
          actual_rayon_id,
          kvartal_id,
-         area_ha,
-         api_nazv = NAZV,
-         api_category_rus = CATEGORY_RUS,
-         api_pravo_rus = PRAVO_RUS,
-         api_tsn_rus = TSN_RUS
+         area_ha#,
+         # api_nazv = NAZV,
+         # api_category_rus = CATEGORY_RUS,
+         # api_pravo_rus = PRAVO_RUS,
+         # api_tsn_rus = TSN_RUS
          ) %>% 
   left_join(ray_geoms, by = c("leyer_id", "obl_id", "rayon_id")) %>% 
   left_join(plot_metadata, by = "cadastre_id") %>% 
   select(
     cadastre_id:kvartal_id, 
     area_ha,
-    api_nazv, 
+    # api_nazv, 
     obl_rus:rayon_rus,
-    contains("api_"),
+    # contains("api_"),
     contains("meta_")
     )
 
