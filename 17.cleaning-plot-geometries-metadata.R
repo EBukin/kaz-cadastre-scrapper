@@ -9,6 +9,23 @@ source("R/find-plots-calls-processors.R")
 
 
 
+translit_kaz_text <-
+  . %>%
+  stringi::stri_trans_general( "Kazakh-Latin/BGN") %>%
+  stringi::stri_trans_general("Latin-ASCII") %>% 
+  stringr::str_to_lower() %>% 
+  stringr::str_squish() %>% 
+  stringr::str_replace_all("[^[:alnum:] ]", "") 
+
+
+translit_rus_text <-
+  . %>%
+  stringi::stri_trans_general( "Cyrillic-Latin/BGN") %>%
+  stringi::stri_trans_general("Latin-ASCII") %>% 
+  stringr::str_to_lower() %>% 
+  stringr::str_squish() %>% 
+  stringr::str_replace_all("[^[:alnum:] ]", "") 
+
 
 # Geometries --------------------------------------------------------------
 
@@ -30,11 +47,15 @@ plot_geoms <-
   inner_join(tibble(obl_id = "03", rayon_id = c("323", "044", '050')))
 
 plot_metadata <-
-  here("data-clean", "06-plots-metadata-clean.rds") %>%
-  read_rds() %>%
-  select(cadastre_id, contains("rus_"), -rus_NA, -contains("kadastrovyj")) %>% 
-  rename_at(vars(contains("rus")), ~str_c("meta_", str_replace(., "rus_", "")))
-
+  here("data-clean", "06-plots-metadata-clean-2021-07-20.rds") %>%
+  read_rds() %>% 
+  mutate(
+    across(contains('rus_'), ~ translit_rus_text(.)),
+    across(contains('kaz_'), ~ translit_kaz_text(.))
+  ) %>%
+  select(cadastre_id, contains("rus_"), contains("kaz_"), -one_of(c("rus_NA", "success")),
+         -contains("kadastrovyj")) %>%
+  rename_at(vars(contains("rus"), contains("kaz")), ~str_c("meta_", .))
 
 plot_export_clean <-
   plot_geoms %>%

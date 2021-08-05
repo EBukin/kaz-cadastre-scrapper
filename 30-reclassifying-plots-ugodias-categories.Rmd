@@ -1,0 +1,275 @@
+---
+title: "Reclassification of plot purposes"
+author: "Eduard Bukin"
+date: "8/4/2021"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+
+```{r setup}
+library(pacman)
+pacman::p_load(sf, tidyverse, rgdal, rmapshaper, mapview, here, tidytext,
+               knitr, kableExtra)
+```
+
+```{r}
+plots_ugods_geoms <- read_rds("data-clean/10.1-sarah-request-clean/plot-geom-ugod-areas.rds") 
+```
+
+
+## Main goal
+
+We attempt to reclassify free-text 'celevoe naznachenie' into the more interpretable categories. We do so in the following way:
+
+1. Select 3 columns: plot ID, Naznachenie and Area of the plot.
+2. Do some basic semantic analysis of the words. 
+3. Use `str_detect()` and some conditional statements to reclassify the actual celevoe naznachenie.
+4. Check frequencies of different "celevoe naznachenie" in each classified category.
+5. `left_join()` new classification to the plots geometries and resave the data.
+
+
+### Steps 1 and 2:
+
+There are quite some words in here. 
+
+```{r}
+ugod_mtdt_df <- 
+  plots_ugods_geoms %>% 
+  st_drop_geometry() %>% 
+  as_tibble() %>% 
+  select(cadastre_id, cel_nazn = meta_rus_celevoe_naznacenie, 
+          cel_nazn_kaz = meta_kaz_celevoe_naznacenie, area_ha ) 
+
+# Checking words frequency
+ugod_mtdt_df %>% 
+  unnest_tokens(word, cel_nazn) %>%
+  count(word, sort = TRUE) %>% 
+  kable(format = "html") %>% 
+  scroll_box(height = "500px", fixed_thead = T)
+
+# Checking words frequency
+ugod_mtdt_df %>% 
+  unnest_tokens(word, cel_nazn_kaz) %>%
+  count(word, sort = TRUE) %>% 
+  kable(format = "html") %>% 
+  scroll_box(height = "500px", fixed_thead = T)
+```
+
+
+### Step 3
+
+New variable "new_nazn" correspond to the new classification.
+
+```{r}
+plot_naznachenie <- 
+  ugod_mtdt_df %>% 
+  mutate(
+    new_nazn = NA_character_,
+    cel_nazn = str_to_lower(cel_nazn),
+    new_nazn =
+      case_when(
+        is.na(new_nazn) & 
+          (
+            str_detect(cel_nazn, "podsobno|obnogo|podsosbnogo|podsobonogo|podsobngo|podsounogo") &
+              !str_detect(cel_nazn, "pomesenie") |
+              (str_detect(cel_nazn, "licn") & !str_detect(cel_nazn, "teplic") & 
+                 str_detect(cel_nazn, "hozaj"))
+          ) ~ "ag_hh_podsob",
+        
+        is.na(new_nazn) & (
+          str_detect(cel_nazn, "krest|fermers|kroest|kreas|kores|korest")
+        ) ~ 
+          "ag_IF_krest",
+        
+        is.na(new_nazn) & 
+          (
+            str_detect(cel_nazn, "sadovod|sadav|sadoa|sadov|saadov|sada|sadlov|sadorv") &
+              !str_detect(cel_nazn, "detskog")
+            ) ~ 
+          "ag_gardens",
+        
+        is.na(new_nazn) & 
+          (
+          str_detect(cel_nazn, "tovarnogo|tovarn|too|pred|firm|teplic|tiplic") | 
+          (str_detect(cel_nazn, "veden") & str_detect(cel_nazn, "hozaj") &
+             !str_detect(cel_nazn, "ohotn")) 
+        ) ~ 
+          "ag_prod",
+        
+        is.na(new_nazn) & (
+          str_detect(cel_nazn, "selsko") & 
+          !str_detect(cel_nazn, "obslu|ustanov|klub|maga|obsz") |
+          str_detect(cel_nazn, "vypasa|skota") |
+          str_detect(cel_nazn, "ohotn")
+        ) ~ 
+          "ag_other",
+        
+        is.na(new_nazn) & (
+          str_detect(cel_nazn, "stroitel") &
+            !str_detect(cel_nazn, "npp|park|prirod")
+          ) ~ 
+          "noag_const",
+        
+        is.na(new_nazn) & (
+          str_detect(cel_nazn, "bsluz|magazi|ustanov|klub|razmes|kompl|obsz|oblsluz") &
+            !str_detect(cel_nazn, "npp|park|prirod")
+        ) ~ 
+          "noag_service",
+        
+        is.na(new_nazn) & (
+          str_detect(cel_nazn, "ohotnic")
+        ) ~ 
+          "other_other", #"other_hunting",
+        
+        is.na(new_nazn) & (
+          str_detect(cel_nazn, "npp|prirod") 
+        ) ~
+          "other_protected", #"other_forest",
+        
+        is.na(new_nazn) & (
+          str_detect(cel_nazn, "lesnogo|leso") 
+        ) ~
+          "other_forest", #"other_forest",
+        
+        is.na(new_nazn) & (
+          str_detect(cel_nazn, "forele|rybno|prudov")
+        ) ~ 
+          "other_fish", #"other_fish",
+        
+        TRUE ~ "other_other"
+      )
+  )
+
+```
+
+
+### Step 4. Checking quality of classification
+
+
+#### All categories at once
+
+```{r}
+plot_naznachenie %>%
+  count(new_nazn, cel_nazn, cel_nazn_kaz) %>%
+  arrange(new_nazn, desc(n)) %>%
+  DT::datatable(fillContainer = T, options = list(paging = FALSE), height = "500px") %>% 
+  htmltools::div(height = "500px")
+```
+
+
+#### By each category
+
+```{r echo=FALSE}
+plot_naznachenie$new_nazn %>%
+  unique() %>%
+  sort() %>% 
+  map(~{
+    htmltools::tagList(
+      htmltools::h5(.x),
+      plot_naznachenie %>%
+        filter(new_nazn ==  .x) %>%
+        count(new_nazn, cel_nazn, cel_nazn_kaz) %>%
+        arrange(new_nazn, desc(n)) %>%
+        DT::datatable(fillContainer = T, options = list(paging = FALSE))
+    )
+    # cat("####", .x, "\n\n\n\n")
+    #  %>%
+    #   knit_print()
+    # cat("\n\n\n\n")
+  }) %>% 
+  htmltools::tagList()
+```
+
+
+#### Visualising everything 
+
+```{r eval = FALSE}
+# plots_ugods_geoms_simplified <-
+#   plots_ugods_geoms %>%
+#   # st_drop_geometry() %>% 
+#   # as_tibble() %>% 
+#   # mutate(group = sort(row_number() %% 3)) %>%
+#   group_by(rayon_id) %>% 
+#   nest() %>% 
+#   mutate(data = map(data, ~ {
+#     cat("new group \n\n")
+#     rmapshaper::ms_simplify(.x, keep = .05, keep_shapes = T)})) %>% 
+#   ungroup() %>% 
+#   # select(-group) %>% 
+#   unnest()
+# object.size(plots_ugods_geoms_simplified) / 1024 / 1024
+# object.size(plots_ugods_geoms) / 1024 / 1024
+# plots_ugods_geoms_simplified %>% write_rds("data-temp/plots_ugods_geoms_simplified.rds", compress = "gz")
+# plots_ugods_geoms_simplified <- read_rds("data-temp/plots_ugods_geoms_simplified.rds")
+
+# out_map <-
+#   plots_ugods_geoms %>%
+#   st_as_sf() %>%
+#   left_join(plot_naznachenie %>% select(cadastre_id , new_nazn), by = "cadastre_id") %>%
+#   # filter(!str_detect(new_nazn, "noag_")) %>%
+#   select(cadastre_id, new_nazn, contains("meta_")) %>%
+#   mapview(., zcol = "new_nazn", burst	= TRUE)
+# mapshot(out_map, url = "data-clean/10.1-sarah-request-clean/plot-new-class.html")
+```
+
+
+### Step 5. Saving results into a new file
+
+
+```{r warning=FALSE}
+plot_naznachenie %>% 
+  write_rds("./data-clean/10.1-sarah-request-clean/plot-celevoe-naznac-reclass.rds", compress = "gz")
+
+plots_ugods_geoms2 <-
+  plots_ugods_geoms %>%
+  left_join(plot_naznachenie %>% select(cadastre_id , new_nazn), by = "cadastre_id") %>%
+  select(cadastre_id, new_nazn, everything())
+
+plots_ugods_geoms2 %>%
+  write_rds(
+    "./data-clean/10.1-sarah-request-clean/plot-geom-ugod-areas-naznac-reclass.rds",
+    compress = "gz"
+  )
+
+plots_ugods_geoms2 %>% 
+  st_write(
+    here(
+      "data-clean",
+      "10.1-sarah-request-clean",
+      "plot-geom-ugod-areas-naznac-reclass-shp",
+      "plot-geom-ugod-areas-naznac-reclass.shp"
+    ), 
+    delete_layer = TRUE
+  )
+
+plots_ugods_geoms3 <-
+  read_rds("data-clean/10.1-sarah-request-clean/plot-fractions-ugod-all-geom.rds") %>%
+  left_join(plot_naznachenie %>% select(cadastre_id , new_nazn), by = "cadastre_id") %>%
+  select(cadastre_id, ugodia, plot_class = new_nazn, contains("area"), everything()) %>% 
+  mutate(plot_class_ugodia = str_c(plot_class, " - ", ugodia))
+
+plots_ugods_geoms3 %>%
+  write_rds(
+    "./data-clean/10.1-sarah-request-clean/plot-fractions-ugod-all-naznac-reclass.rds",
+    compress = "gz"
+  )
+
+plots_ugods_geoms2 %>% 
+  st_write(
+    here(
+      "data-clean",
+      "10.1-sarah-request-clean",
+      "plot-fractions-ugod-all-naznac-reclass-shp",
+      "plot-fractions-ugod-all-naznac-reclass.shp"
+    ), 
+    delete_layer = TRUE
+  )
+
+# out_map2 <-
+#   plots_ugods_geoms3 %>%
+#   mapview(., zcol = "plot_class_ugodia", burst	= TRUE)
+# mapshot(out_map2, url = "data-clean/10.1-sarah-request-clean/ugod-plot-new-class.html")
+```
+
